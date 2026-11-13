@@ -45,9 +45,7 @@ describe('WorkspaceBrowser.module.css list', () => {
   const listArea = declarations('.listArea')
   const list = declarations('.list')
 
-  // The scroll-state rule repeats the expanded list-area selector, so ordinary rules are read before it.
-  const [ordinaryCss = '', scrollStateCss = ''] = css.split('@container scroll-state(scrollable: bottom)')
-  const expandedListArea = declarationsFrom(ordinaryCss, '.root:not(.rail) .listArea')
+  const expandedListArea = declarations('.root:not(.rail) .listArea')
 
   it('scrolls the expanded list area as the section\'s own scroller while rows keep natural height', () => {
     expect(list?.get('overflow')).toBe('visible')
@@ -67,11 +65,6 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(root?.get('padding-right')).toBeUndefined()
     expect(declarations('.rail .listArea')).toBeUndefined()
     expect(declarations('.list::-webkit-scrollbar')).toBeUndefined()
-  })
-
-  it('leaves user scrolling to the sidebar viewport until it reaches its end', () => {
-    const block = /^ \{([\s\S]*?)\n\}/.exec(scrollStateCss)?.[1] ?? ''
-    expect(declarationsFrom(block, '.root:not(.rail) .listArea')?.get('overflow-y')).toBe('hidden')
   })
 
   it('keeps the expanded section at most one viewport tall, and exactly that tall while searching', () => {

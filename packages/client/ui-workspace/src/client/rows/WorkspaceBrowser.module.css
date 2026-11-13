@@ -358,14 +358,6 @@
   scrollbar-gutter: stable;
 }
 
-/* While the sidebar viewport can still scroll down, the seat does not take user
-   scrolling, so touch and native scrolling move the navigation away first. */
-@container scroll-state(scrollable: bottom) {
-  .root:not(.rail) .listArea {
-    overflow-y: hidden;
-  }
-}
-
 /* Positions the top insertion marker and the exit overlay of animated rows. */
 .treeBody {
   flex: 1;

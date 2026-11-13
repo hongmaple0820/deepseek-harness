@@ -7,9 +7,8 @@
  * `sidebar.settings` registrant's (ui-settings), followed by optional footer
  * actions in `sidebar.footer.action`.
  */
-import type { RefCallback } from 'react'
 import type {
-  InjectFace, PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, SlotHookFactory,
+  InjectFace, PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -52,15 +51,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * grouped/flat session list, and every workspace dialog. Declared by this
      * package's 'sidebar' entry (declaring is claiming); ui-workspace
      * registers the browser. The section renders inside the sidebar viewport,
-     * which is a size container one viewport tall and a scroll-state container,
-     * and binds its own vertical scroller through `useSectionScroller`.
+     * which is a size container one viewport tall and scrolls its own rows.
      */
     'sidebar.workspaces': {
       kind: 'single'
       scope: 'root'
       owner: SidebarSectionOwnerProps
-      hookContext: SidebarSectionHookContext
-      inject: SidebarSectionInjected
     }
     /**
      * The settings seat at the sidebar foot. Declared by this package's
@@ -159,32 +155,6 @@ export interface SidebarSectionOwnerProps {
   expandSidebar: () => void
 }
 
-/** Sidebar viewport capability handed to the `sidebar.workspaces` occupant. */
-export interface SectionScroller {
-  /**
-   * Ref callback for the occupant's own vertical scroller. While bound, wheel scrolling over
-   * the sidebar viewport moves the navigation away first and then continues into this element;
-   * scrolling up returns this element to its top before the navigation reappears.
-   */
-  readonly bindScrollerRef: RefCallback<HTMLElement>
-}
-
-/**
- * Bind the occupant to the sidebar viewport it renders in.
- * @returns The same object on every call for one sidebar.
- */
-export type UseSectionScroller = () => SectionScroller
-
-/** Viewport capability supplied with each `sidebar.workspaces` render. */
-export interface SidebarSectionHookContext {
-  readonly useSectionScroller: UseSectionScroller
-}
-
-/** Slot-level Hook factory for the `sidebar.workspaces` occupant. */
-export interface SidebarSectionInjected {
-  hooks: { sectionScroller: SlotHookFactory<'sidebar.workspaces', UseSectionScroller> }
-}
-
 /**
  * Owner share of the sidebar settings seat: the column display state the
  * occupant's trigger row must render against (wide row vs rail icon).
@@ -227,6 +197,11 @@ export type SidebarRootInjected = {
    * @param pinned - Whether the launcher shows in the sidebar.
    */
   setPinned: (id: string, pinned: boolean) => void
+  /**
+   * Fold or expand the global panel navigation.
+   * @param folded - Whether the navigation is folded.
+   */
+  setFolded: (folded: boolean) => void
   /** Record activation of an official navigation control without changing navigation. */
   trackEntryClick: (attributes: ProductEventMap['sidebar_menu_click']) => void
   /** Private reactive sources bound to framework selector hooks. */
@@ -237,6 +212,8 @@ export type SidebarRootInjected = {
     entryPins: ObservableSnapshot<readonly string[]>
     /** Whether `sidebar.panellist.actions` has registrations. */
     entryActions: ObservableSnapshot<boolean>
+    /** Whether the global panel navigation is folded to its header row. */
+    entryFold: ObservableSnapshot<boolean>
   }
 }
 

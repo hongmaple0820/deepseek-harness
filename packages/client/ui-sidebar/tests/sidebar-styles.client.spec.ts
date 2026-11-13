@@ -87,7 +87,8 @@ describe('SidebarRoot.module.css', () => {
     expect(scrollport?.get('margin-left')).toBe('-4px')
     expect(scrollport?.get('margin-right')).toBe('calc(2px - var(--dsh-sidebar-inline-padding))')
     expect(scrollport?.get('scroll-padding-block')).toBeUndefined()
-    expect(declarations('.panelList')?.get('grid-row')).toBe('2')
+    expect(declarations('.panelRegion')?.get('grid-row')).toBe('2')
+    expect(declarations('.panelRegion')?.get('grid-column')).toBe('2')
     expect(declarations('.regionArea')?.get('grid-row')).toBe('4')
     expect(declarations('.regionArea')?.get('overflow')).toBeUndefined()
     expect(declarations('.regionArea')?.get('margin-right')).toBeUndefined()
@@ -101,11 +102,23 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.collapsed .scrollArea')?.get('margin')).toBe('0')
   })
 
-  it('hides the expanded viewport scrollbar and publishes its scroll state to the section', () => {
+  it('caps the expanded panel navigation and scrolls it in place', () => {
+    const region = declarations('.panelRegion')
+    expect(region?.get('display')).toBe('flex')
+    expect(region?.get('flex-direction')).toBe('column')
+    expect(declarations('.panelHeader')?.get('height')).toBe('24px')
+    const list = declarations('.panelList')
+    expect(list?.get('max-height')).toBe('40cqh')
+    expect(list?.get('overflow-y')).toBe('auto')
+    expect(list?.get('scrollbar-gutter')).toBe('stable')
+    expect(declarations('.collapsed .panelList')?.get('max-height')).toBe('40vh')
+    expect(declarations('.collapsed .panelList')?.get('scrollbar-gutter')).toBe('auto')
+    // The viewport keeps the browser's own scrollbar, so a navigation stack that
+    // overflows it stays reachable instead of being clipped.
     const expanded = declarations('.root:not(.collapsed) .scrollArea')
-    expect(expanded?.get('container-type')).toBe('scroll-state')
-    expect(expanded?.get('scrollbar-width')).toBe('none')
-    expect(declarations('.root:not(.collapsed) .scrollArea::-webkit-scrollbar')?.get('display')).toBe('none')
+    expect(expanded?.get('container-type')).toBeUndefined()
+    expect(expanded?.get('scrollbar-width')).toBeUndefined()
+    expect(declarations('.root:not(.collapsed) .scrollArea::-webkit-scrollbar')).toBeUndefined()
   })
 
   it('keeps the reviewed expanded spacing separate from rail and caption controls', () => {
