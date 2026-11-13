@@ -108,9 +108,6 @@ const renderDirectoryFlowOnly: WorkspaceBrowserProps['renderSlot'] = (name: stri
     ? <div data-testid="directory-flow" />
     : null
 
-// Mounted outside a sidebar, the browser binds its list area to nothing.
-const SECTION_SCROLLER = { bindScrollerRef: () => {} }
-
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const controls = createWorkspaceShortcutControls()
   const request = createSnapshotStore<WorkspaceActionRequest | null>(null)
@@ -142,7 +139,6 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
-    useSectionScroller: () => SECTION_SCROLLER,
     notifyArchivedNotOpenable: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
@@ -169,6 +165,17 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
   b.view.rerender(<WorkspaceBrowser {...b.props} />)
 }
 
+/** Persist Workspace expansion before mount; group rows start collapsed. */
+function seedExpansion(keys: readonly string[]): void {
+  localStorage.setItem('dsh.workspace.view.v5', JSON.stringify({
+    groupBy: 'workspace',
+    orderBy: 'manual',
+    groupExpansion: Object.fromEntries(keys.map(key => [key, true])),
+    sessionOrderByAccount: {},
+    archivedFilter: 'default',
+  }))
+}
+
 describe('WorkspaceBrowser', () => {
   it.each(['workspace', 'flat', 'ungrouped'] as const)('passes the standard menu factory through the %s list', (mode) => {
     const preferences = createWorkspaceViewStore().create()
@@ -190,20 +197,6 @@ describe('WorkspaceBrowser', () => {
         label: '工作区“alpha”的操作', className: rowCss.iconButton,
       })
     }
-  })
-
-  it('binds the list area as the section scroller only while the sidebar is wide', () => {
-    const bindScrollerRef = vi.fn()
-    const browser = mount({ useSectionScroller: () => ({ bindScrollerRef }) })
-    const list = browser.view.container.querySelector<HTMLElement>('[data-sidebar-list-area]')!
-    expect(bindScrollerRef).toHaveBeenLastCalledWith(list)
-    rerender(browser, { wide: false })
-    expect(bindScrollerRef).toHaveBeenLastCalledWith(null)
-    expect(browser.view.container.querySelector('[data-sidebar-list-area]')).toBe(list)
-    rerender(browser, { wide: true })
-    expect(bindScrollerRef).toHaveBeenLastCalledWith(list)
-    browser.view.unmount()
-    expect(bindScrollerRef).toHaveBeenLastCalledWith(null)
   })
 
   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
@@ -440,6 +433,7 @@ describe('WorkspaceBrowser', () => {
   it('reconciles a late blank and its first prompt while the sidebar is collapsed', async () => {
     const old = summary('old', 10)
     const blank = summary('blank', 1, { blank: true })
+    seedExpansion(['alpha'])
     const b = mount({
       wide: false,
       useSessions: hook(sessionState([old])),
@@ -973,6 +967,7 @@ describe('WorkspaceBrowser', () => {
     const ordinary = Array.from({ length: 17 }, (_, index) => summary(`session-${index + 1}`, 17 - index))
     const blank = summary('blank', 18, { blank: true })
     const items = withBlank ? [blank, ...ordinary] : ordinary
+    if (withBlank) seedExpansion(['alpha'])
     mount({
       useSessions: hook(sessionState(items, withBlank ? { main: blank.id } : {})),
       useWorkspaces: hook(workspaceState([workspace('alpha', items.map(item => item.id))])),
@@ -1047,6 +1042,7 @@ describe('WorkspaceBrowser', () => {
   it('keeps the blank New Session outside the five-row folding quota', () => {
     const ordinary = Array.from({ length: 6 }, (_, index) => summary(`session-${index + 1}`, 6 - index))
     const blank = summary('blank', 7, { blank: true })
+    seedExpansion(['alpha'])
     const b = mount({
       useSessions: hook(sessionState([blank, ...ordinary], { main: blank.id })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [blank.id, ...ordinary.map(item => item.id)])])),
@@ -1072,6 +1068,7 @@ describe('WorkspaceBrowser', () => {
   it('pins the blank while collapsed drags keep an ordinary source visible', async () => {
     const ordinary = Array.from({ length: 6 }, (_, index) => summary(`session-${index + 1}`, 6 - index))
     const blank = summary('blank', 7, { blank: true })
+    seedExpansion(['alpha'])
     const b = mount({
       useSessions: hook(sessionState([blank, ...ordinary], { main: blank.id })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [blank.id, ...ordinary.map(item => item.id)])])),
@@ -1104,6 +1101,7 @@ describe('WorkspaceBrowser', () => {
   it('reorders a newly exposed batch row while preserving the blank and hidden tail', () => {
     const ordinary = Array.from({ length: 12 }, (_, index) => summary(`session-${index + 1}`, 12 - index))
     const blank = summary('blank', 13, { blank: true })
+    seedExpansion(['alpha'])
     const b = mount({
       useSessions: hook(sessionState([blank, ...ordinary], { main: blank.id })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [blank.id, ...ordinary.map(item => item.id)])])),
@@ -1370,30 +1368,49 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
-  it('auto-expands the Ungrouped bucket for a loose current session; its header has neither menu nor ＋', () => {
-    mount({
+  it('starts the Ungrouped bucket collapsed for a loose current session; its header has neither menu nor ＋', () => {
+    const b = mount({
       useSessions: hook(sessionState([summary('loose', 1)], { main: sid('loose') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
     })
-    // The loose session's group is UNGROUPED_KEY: expanded by the effect.
-    expect(screen.getByText('loose')).toBeTruthy()
+    // Groups start collapsed, so the current Session's bucket stays closed
+    // until its row is activated; the Ungrouped header offers no group actions.
+    expect(screen.queryByText('loose')).toBeNull()
+    expect(b.store.getSnapshot().groupExpansion[UNGROUPED_KEY]).toBeUndefined()
     expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
     expect(screen.queryByRole('button', { name: '在“未分组”中新建会话' })).toBeNull()
+    fireEvent.click(screen.getByText('未分组'))
+    expect(screen.getByText('loose')).toBeTruthy()
   })
 
-  it('keeps an already-expanded group when the selection moves within it', () => {
+  it('keeps a collapsed group closed when the selection moves within it', () => {
     const first = sessionState([summary('a', 2), summary('b', 1)], { main: sid('a') })
     const b = mount({
       useSessions: hook(first),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['a', 'b'])])),
     })
-    expect(screen.getByText('a')).toBeTruthy()
-    // Selection hop inside the same group: the effect re-runs and leaves the
-    // expansion list unchanged (no duplicate key, group still open).
+    expect(screen.queryByText('a')).toBeNull()
+    // A selection hop inside the same group writes no expansion preference.
     rerender(b, { useSessions: hook({ ...first, main: sid('b') }) })
-    expect(screen.getByText('b')).toBeTruthy()
-    fireEvent.click(screen.getByText('alpha'))
     expect(screen.queryByText('b')).toBeNull()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({})
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.getByText('b')).toBeTruthy()
+    expect(b.store.getSnapshot().groupExpansion).toEqual({ alpha: true })
+  })
+
+  it('remembers each Workspace expansion across a reload', () => {
+    const props = {
+      useSessions: hook(sessionState([summary('s1', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['s1'])])),
+    }
+    const first = mount(props)
+    expect(screen.queryByText('s1')).toBeNull()
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.getByText('s1')).toBeTruthy()
+    first.view.unmount()
+    mount(props)
+    expect(screen.getByText('s1')).toBeTruthy()
   })
 
   it('shows only the current blank session as the localized New Session, excluded from search', () => {
@@ -1403,6 +1420,7 @@ describe('WorkspaceBrowser', () => {
       [currentBlank, staleBlank],
       { main: currentBlank.id },
     )
+    seedExpansion(['alpha', 'beta'])
     const b = mount({
       useSessions: hook(sessions),
       useWorkspaces: hook(workspaceState([

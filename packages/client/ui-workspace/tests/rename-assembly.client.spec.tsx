@@ -25,7 +25,6 @@ import { RemoteError, SlotTestRuntime, usePinnedBrowserLanguages } from '@deepse
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
@@ -58,7 +57,7 @@ type FrameProps = PropsRenderSlots<'sidebar.workspaces' | 'shell.overlay'>
 function SidebarFrame({ renderSlot }: FrameProps) {
   return (
     <>
-      {renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} }, { hookContext: SECTION_HOOK_CONTEXT })}
+      {renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => {} })}
       {renderSlot('shell.overlay', {})}
     </>
   )
@@ -68,7 +67,7 @@ function SidebarFrame({ renderSlot }: FrameProps) {
 async function declareFrame(runtime: SlotTestRuntime): Promise<void> {
   await runtime.root.declare(
     {
-      'sidebar.workspaces': { kind: 'single', scope: 'root', inject: SECTION_INJECT },
+      'sidebar.workspaces': { kind: 'single', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
     } as never,
     SidebarFrame as never,
@@ -85,6 +84,17 @@ async function seedWorkspace(runtime: SlotTestRuntime): Promise<void> {
   })
 }
 
+/** Persisted expansion for the seeded Workspace; its rows start collapsed. */
+function seedExpansion(): void {
+  localStorage.setItem('dsh.workspace.view.v5', JSON.stringify({
+    groupBy: 'workspace',
+    orderBy: 'updated',
+    groupExpansion: { w1: true },
+    sessionOrderByAccount: {},
+    archivedFilter: 'default',
+  }))
+}
+
 describe('session rename through the assembled browser', () => {
   it('renders independently registered Session actions in declared order', async () => {
     const runtime = await createRuntime()
@@ -96,6 +106,7 @@ describe('session rename through the assembled browser', () => {
     })
     await runtime.sessions.retainFor(runtime.ctx, SID, { source: 'mainView' }).ready
     await seedWorkspace(runtime)
+    seedExpansion()
     await declareFrame(runtime)
     await runtime.mount({ inject: [...inject], apply })
     const registerAction = (id: string, order: number, priority: number, label: string) => {
@@ -170,11 +181,12 @@ describe('session rename through the assembled browser', () => {
     })
     await runtime.sessions.retainFor(runtime.ctx, SID, { source: 'mainView' }).ready
     await seedWorkspace(runtime)
+    seedExpansion()
     await declareFrame(runtime)
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()
 
-    // The current session's group auto-expands; open the row's action menu.
+    // The seeded expansion keeps the Session row visible; open its action menu.
     const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
     fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))
     fireEvent.click(await view.findByRole('menuitem', { name: '重命名' }))
@@ -212,6 +224,7 @@ describe('session rename through the assembled browser', () => {
     })
     await runtime.sessions.retainFor(runtime.ctx, SID, { source: 'mainView' }).ready
     await seedWorkspace(runtime)
+    seedExpansion()
     await declareFrame(runtime)
     await runtime.mount({ inject: [...inject], apply })
     const view = runtime.renderRoot()

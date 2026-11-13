@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/storage/user-data-backup/README.md
+/:
+  en: 779f77b7fa82287a
+  zh: 4b855734b4101a26
+/deepseek-ai-dsh-user-data-backup:
+  en: a2d45d6b3c09271f
+  zh: ae7701556d2596af
+/deepseek-ai-dsh-user-data-backup/summary:
+  en: 0a151cb52eb12ad9
+  zh: 41c4d2b349bb7ded
+/deepseek-ai-dsh-user-data-backup/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: bda879a892f240f0
+/deepseek-ai-dsh-user-data-backup/use-this-package:
+  en: 0f1706810e7a179b
+  zh: 0caf7206d84ddd68
+/deepseek-ai-dsh-user-data-backup/use-this-package/bundle-layout:
+  en: b0903a1f7f6f0778
+  zh: de85a5c5a62747b5
+/deepseek-ai-dsh-user-data-backup/use-this-package/import-rules:
+  en: 29060f316cdf8edc
+  zh: b83a4743258b2407
+/deepseek-ai-dsh-user-data-backup/use-this-package/remote-sync:
+  en: c7695dbba01f3472
+  zh: 77e858787f991b27
+/deepseek-ai-dsh-user-data-backup/understand-the-implementation:
+  en: f43681f79061f630
+  zh: f633dd975ed48756
+/deepseek-ai-dsh-user-data-backup/further-exploration:
+  en: ee32af2815ec605e
+  zh: b74078a1be8267d7
+/deepseek-ai-dsh-user-data-backup/model-experience:
+  en: 5fe9cbc0b366d0fd
+  zh: 2394ce54969d132d
+/deepseek-ai-dsh-user-data-backup/model-experience/kv-cache-effect:
+  en: 492babd43dbd1fd0
+  zh: 150b6f822cfe1d79
+/deepseek-ai-dsh-user-data-backup/known-limitations-and-deferred-work:
+  en: 10853d2e6583228c
+  zh: d9d5c566e4ad6eaa
+/deepseek-ai-dsh-user-data-backup/known-limitations-and-deferred-work/dev-note:
+  en: b63dce98234093d8
+  zh: 103572b089bc71c7

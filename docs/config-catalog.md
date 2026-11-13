@@ -4926,6 +4926,64 @@ export type ApprovalPolicy = 'ask' | 'never'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-user-approval -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-user-data-backup -->
+<a id="deepseek-aidsh-user-data-backup"></a>
+
+## `@deepseek-ai/dsh-user-data-backup`
+
+- `inject`: `connection`
+- `source`: [`packages/storage/user-data-backup/src/index.ts:128`](../packages/storage/user-data-backup/src/index.ts)
+
+```ts config-catalog
+/** Backup policy. */
+export interface Config {
+  /** Version recorded in each manifest; resolved from the package manifest when absent. */
+  readonly dshVersion?: string
+  /** Remotes a push may address, by id. */
+  readonly remotes?: Record<string, RemoteSettings>
+  /** Recurring push, so a machine keeps a remote copy without anyone pressing a button. */
+  readonly schedule?: ScheduleConfig
+}
+
+/** One remote target as configuration or the settings page spells it. */
+export interface RemoteSettings {
+  /** Transport the remote speaks. */
+  readonly kind: 'webdav' | 's3'
+  /** WebDAV collection URL. */
+  readonly url?: string
+  /** WebDAV basic-auth user. */
+  readonly username?: string
+  /** WebDAV basic-auth password. */
+  readonly password?: string
+  /** S3 endpoint origin. */
+  readonly endpoint?: string
+  /** S3 signing region. */
+  readonly region?: string
+  /** S3 bucket name. */
+  readonly bucket?: string
+  /** S3 access key id. */
+  readonly accessKeyId?: string
+  /** S3 secret access key. */
+  readonly secretAccessKey?: string
+  /** Prefix below the collection or bucket root. */
+  readonly prefix?: string
+  /** Newest bundles a push keeps on this remote. */
+  readonly keep?: number
+}
+
+/** Recurring push to every remote; off unless configured. */
+export interface ScheduleConfig {
+  /** Minutes between automatic pushes; absent or 0 arms no timer. */
+  readonly everyMinutes?: number
+  /** Components an automatic push includes; the export default when absent. */
+  readonly components?: BackupComponent[]
+}
+
+/** Components a caller may include in a bundle. */
+export type BackupComponent = 'profile' | 'settings' | 'sessions' | 'credentials'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-user-data-backup -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-web -->
 <a id="deepseek-aidsh-web"></a>
 
@@ -5247,6 +5305,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-ui-settings-session-log` | — | [`packages/client/ui-settings-session-log/src/index.ts`](../packages/client/ui-settings-session-log/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-shell` | — | [`packages/client/ui-settings-shell/src/index.ts`](../packages/client/ui-settings-shell/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-subagent` | — | [`packages/client/ui-settings-subagent/src/index.ts`](../packages/client/ui-settings-subagent/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-settings-user-data` | — | [`packages/client/ui-settings-user-data/src/index.ts`](../packages/client/ui-settings-user-data/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-web-search` | — | [`packages/client/ui-settings-web-search/src/index.ts`](../packages/client/ui-settings-web-search/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-shortcuts` | — | [`packages/client/ui-shortcuts/src/index.ts`](../packages/client/ui-shortcuts/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar` | — | [`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts) |

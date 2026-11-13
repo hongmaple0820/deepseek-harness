@@ -568,8 +568,9 @@
 }
 
 /* Both gaps scroll away; ordinary rows do not force overflow when they fit. The
-   trailing column keeps content 8px from the sidebar edge; this viewport draws no
-   scrollbar of its own. */
+   trailing column keeps content 8px from the sidebar edge. The navigation and the
+   workspace section scroll their own rows, so this viewport only scrolls the
+   navigation away once the capped navigation plus the section exceed it. */
 .scrollArea {
   flex: 1;
   min-height: 0;
@@ -581,19 +582,6 @@
   margin-right: calc(2px - var(--dsh-sidebar-inline-padding));
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-/* Expanded, this viewport only scrolls the navigation away; the section below
-   scrolls its own rows and draws the only visible scrollbar. Descendants query
-   the scroll state to take scrolling once this viewport ends. */
-.root:not(.collapsed) .scrollArea {
-  container-type: scroll-state;
-  scrollbar-width: none;
-}
-
-/* Safari versions without `scrollbar-width` still use the WebKit scrollbar. */
-.root:not(.collapsed) .scrollArea::-webkit-scrollbar {
-  display: none;
 }
 
 .scrollArea::before,
@@ -693,14 +681,74 @@
   .panelEntry:has(:focus-visible) .panelUnpin { opacity: 1; }
 }
 
-.panelList {
+/* The navigation region: a header row that folds the rows, above a list capped
+   at 40% of the region so a long plugin menu cannot squeeze the workspace
+   section. The list scrolls itself; the header row stays put. */
+.panelRegion {
   grid-column: 2;
   grid-row: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.panelHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dsh-sidebar-label-gap);
+  width: 100%;
+  height: 24px;
+  margin: 0 0 2px;
+  padding: 0 calc(var(--dsh-sidebar-row-padding) - var(--dsh-sidebar-paint-inset));
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .panelHeader:hover {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.panelHeader:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.panelHeaderLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panelHeaderGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panelList {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 8px;
+  min-height: 0;
+  max-height: 40cqh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /* Panel entries use a 3px paint inset, the New Session bar's 12px radius,
@@ -765,9 +813,17 @@
   white-space: nowrap;
 }
 
+/* The rail has no fold, and its region is no size container: cap the icon rows
+   against the viewport instead. */
+.collapsed .panelRegion {
+  margin-bottom: 12px;
+}
+
 .collapsed .panelList {
   gap: 12px;
-  margin-bottom: 12px;
+  max-height: 40vh;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
 }
 
 .collapsed .panelEntry {

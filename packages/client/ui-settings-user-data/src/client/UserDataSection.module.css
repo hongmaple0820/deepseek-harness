@@ -1,0 +1,163 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 0 24px;
+}
+
+.title {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.description,
+.hint {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 0 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.heading {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.picker {
+  display: none;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-l2);
+}
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.planList li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.planComponent {
+  font-weight: 600;
+}
+
+.remote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-l2);
+}
+
+.remoteHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.remoteId {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.remote li {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-l2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.select {
+  height: 28px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-l1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.ok {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.applied {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.failure {
+  color: var(--dsw-alias-label-danger);
+  font-size: 12px;
+  line-height: 18px;
+}

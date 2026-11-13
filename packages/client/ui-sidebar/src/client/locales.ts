@@ -11,6 +11,8 @@ export const zh = {
   'panels.label': '全局面板',
   'navigation.label': '导航',
   'panels.more': '更多',
+  'panels.fold': '收起面板',
+  'panels.expand': '展开面板',
   'version.copied': '版本号复制成功',
 } satisfies Record<string, string>
 
@@ -28,6 +30,8 @@ export const en = {
   'panels.label': 'Global panels',
   'navigation.label': 'Navigation',
   'panels.more': 'More',
+  'panels.fold': 'Collapse panels',
+  'panels.expand': 'Expand panels',
   'version.copied': 'Version copied',
 } satisfies Record<SidebarKey, string>
 
@@ -42,6 +46,8 @@ export const ja = {
   'panels.label': 'グローバルパネル',
   'navigation.label': 'ナビゲーション',
   'panels.more': 'その他',
+  'panels.fold': 'パネルを折りたたむ',
+  'panels.expand': 'パネルを展開',
   'version.copied': 'バージョンをコピーしました',
 } satisfies Record<keyof typeof en, string>
 
@@ -56,6 +62,8 @@ export const es = {
   'panels.label': 'Paneles globales',
   'navigation.label': 'Navegación',
   'panels.more': 'Más',
+  'panels.fold': 'Contraer paneles',
+  'panels.expand': 'Expandir paneles',
   'version.copied': 'Versión copiada',
 } satisfies Record<keyof typeof en, string>
 
@@ -70,6 +78,8 @@ export const fr = {
   'panels.label': 'Panneaux globaux',
   'navigation.label': 'Navigation',
   'panels.more': 'Plus',
+  'panels.fold': 'Réduire les panneaux',
+  'panels.expand': 'Développer les panneaux',
   'version.copied': 'Version copiée',
 } satisfies Record<keyof typeof en, string>
 
@@ -84,6 +94,8 @@ export const de = {
   'panels.label': 'Globale Bereiche',
   'navigation.label': 'Navigation',
   'panels.more': 'Mehr',
+  'panels.fold': 'Bereiche einklappen',
+  'panels.expand': 'Bereiche ausklappen',
   'version.copied': 'Version kopiert',
 } satisfies Record<keyof typeof en, string>
 
@@ -98,6 +110,8 @@ export const ru = {
   'panels.label': 'Глобальные панели',
   'navigation.label': 'Навигация',
   'panels.more': 'Ещё',
+  'panels.fold': 'Свернуть панели',
+  'panels.expand': 'Развернуть панели',
   'version.copied': 'Версия скопирована',
 } satisfies Record<keyof typeof en, string>
 
@@ -112,5 +126,7 @@ export const pt = {
   'panels.label': 'Painéis globais',
   'navigation.label': 'Navegação',
   'panels.more': 'Mais',
+  'panels.fold': 'Recolher painéis',
+  'panels.expand': 'Expandir painéis',
   'version.copied': 'Versão copiada',
 } satisfies Record<keyof typeof en, string>

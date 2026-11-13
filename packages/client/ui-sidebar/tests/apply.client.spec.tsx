@@ -6,7 +6,7 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type { SidebarRootInjected, SidebarSectionInjected, UseSectionScroller } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type { SidebarRootInjected } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { TrackProductEvent } from '@deepseek-ai/dsh-client-product-analytics/client'
 import { HeaderLeadingControls } from '../src/client/HeaderLeadingControls.tsx'
@@ -68,11 +68,7 @@ describe('ui-sidebar apply', () => {
     expect(b.slots.entries('sidebar')).toHaveLength(1)
     expect(b.slots.spec('sidebar.brand.mark')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('sidebar.brand.name')).toEqual({ kind: 'single', scope: 'root' })
-    const section = b.slots.spec('sidebar.workspaces') as { kind: string; scope: string; inject: SidebarSectionInjected }
-    expect(section).toMatchObject({ kind: 'single', scope: 'root' })
-    // The section occupant's scroller hook is the one each sidebar render supplies.
-    const useSectionScroller: UseSectionScroller = () => ({ bindScrollerRef: () => {} })
-    expect(section.inject.hooks.sectionScroller({} as never, { useSectionScroller })).toBe(useSectionScroller)
+    expect(b.slots.spec('sidebar.workspaces')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('sidebar.settings')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('sidebar.footer.action')).toEqual({ kind: 'list', scope: 'root' })
     expect(b.slots.spec('sidebar.session.action')).toEqual({ kind: 'hoc', scope: 'root' })
@@ -86,10 +82,15 @@ describe('ui-sidebar apply', () => {
     expect(leading[0]!.locale).toBe('sidebar')
     expect(leading[0]!.inject).toBe(b.slots.entries('sidebar')[0]!.inject)
     const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
-    expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar', 'selectPanel', 'setPinned', 'trackEntryClick', 'hooks'])
+    expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar', 'selectPanel', 'setPinned', 'setFolded', 'trackEntryClick', 'hooks'])
     expect(injected.hooks.panels.getSnapshot()).toEqual([])
     expect(injected.hooks.entryPins.getSnapshot()).toEqual([])
     expect(injected.hooks.entryActions.getSnapshot()).toBe(false)
+    // The fold starts expanded and each mutation republishes the snapshot.
+    expect(injected.hooks.entryFold.getSnapshot()).toBe(false)
+    injected.setFolded(true)
+    expect(injected.hooks.entryFold.getSnapshot()).toBe(true)
+    injected.setFolded(true)
     expect(b.slots.entries('main')).toEqual([])
     // Both arms delegate to the Workspace UI's shared New Session action.
     injected.startSession('workspace' as never)

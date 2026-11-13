@@ -344,10 +344,6 @@ function SessionTree({
   const currentGroup = current === undefined || !workspaceReady
     ? undefined
     : owningGroupKey(workspaces, current)
-  useEffect(() => {
-    if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
-    setGroupExpanded(currentGroup, true)
-  }, [current, currentGroup, setGroupExpanded, groupExpansion])
   const parents = useMemo(() => {
     if (!nestWorkspaces) return new Map<string, WorkspaceId | undefined>()
     const keysByPath = new Map(workspaces.map(workspace => [workspace.path, workspace.workspaceId]))
@@ -907,7 +903,6 @@ export function WorkspaceBrowser({
   wide,
   usePanelInfo,
   expandSidebar,
-  useSectionScroller,
   useSessions,
   useSessionStatus,
   useSessionAccess,
@@ -1113,9 +1108,6 @@ export function WorkspaceBrowser({
   })
   const searchRoot = useRef<HTMLDivElement | null>(null)
   const searchInput = useRef<HTMLInputElement | null>(null)
-  // The list area is this section's own vertical scroller; the sidebar hands wheel
-  // scrolling over its viewport to it once the navigation has moved away.
-  const { bindScrollerRef } = useSectionScroller()
   const focusSearch = useCallback(() => {
     searchInput.current?.focus({ preventScroll: true })
   }, [])
@@ -1364,7 +1356,7 @@ export function WorkspaceBrowser({
 
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
-      <div ref={wide ? bindScrollerRef : undefined} className={css.listArea} data-sidebar-list-area="">
+      <div className={css.listArea} data-sidebar-list-area="">
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults

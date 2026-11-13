@@ -10,7 +10,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Session root standard-props merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type { SidebarPanelMetadata, SidebarRootInjected, SidebarSectionInjected } from './contract/slots.ts'
+import type { SidebarPanelMetadata, SidebarRootInjected } from './contract/slots.ts'
+import { createPanelFold } from './panel-fold.ts'
 import { createPanelPins } from './panel-pins.ts'
 import { HeaderLeadingControls } from './HeaderLeadingControls.tsx'
 import { SidebarRoot } from './SidebarRoot.tsx'
@@ -21,14 +22,9 @@ export type {
   SidebarBrandMarkOwnerProps, SidebarBrandNameOwnerProps, SidebarFooterActionOwnerProps,
   SidebarPanelActionEntry, SidebarPanelActionsOwnerProps, SidebarPanelIconOwnerProps, SidebarPanelMetadata,
   SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps, SidebarSessionActionOwnerProps,
-  SidebarSettingsOwnerProps, SectionScroller, SidebarSectionHookContext, SidebarSectionInjected, UseSectionScroller,
+  SidebarSettingsOwnerProps,
 } from './contract/slots.ts'
 export type { SidebarKey } from './locales.ts'
-
-/** The section occupant receives the scroller hook from each render's hookContext. */
-const SIDEBAR_SECTION_INJECT: SidebarSectionInjected = {
-  hooks: { sectionScroller: (_standard, { useSectionScroller }) => useSectionScroller },
-}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -70,6 +66,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'ui-sidebar: panel entries')
   ctx.effect(() => ctx.locale.subscribe(syncPanels), 'ui-sidebar: panel labels')
   const panelPins = createPanelPins()
+  const panelFold = createPanelFold()
   const entryActions = {
     getSnapshot: () => ctx.slots.entriesOfSlot('sidebar.panellist.actions').length > 0,
     subscribe: (listener: () => void) => ctx.slots.subscribe('sidebar.panellist.actions', listener),
@@ -82,8 +79,11 @@ export function apply(ctx: ClientContext): void {
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
     selectPanel: (id) => { ctx.layout.selectPanel(id) },
     setPinned: panelPins.setPinned,
+    setFolded: panelFold.setFolded,
     trackEntryClick: (attributes) => { ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes) },
-    hooks: { panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions },
+    hooks: {
+      panels, shortcuts: ctx.shortcuts.catalog, entryPins: panelPins.unpinned, entryActions, entryFold: panelFold.folded,
+    },
   })
   ctx.slots.inject('sidebar', function* () {
     yield ctx.slots.registerFactory({
@@ -98,7 +98,7 @@ export function apply(ctx: ClientContext): void {
         'sidebar.brand.name': { kind: 'single', scope: 'root' },
         'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
         'sidebar.panellist.actions': { kind: 'list', scope: 'root' },
-        'sidebar.workspaces': { kind: 'single', scope: 'root', inject: SIDEBAR_SECTION_INJECT },
+        'sidebar.workspaces': { kind: 'single', scope: 'root' },
         'sidebar.settings': { kind: 'single', scope: 'root' },
         'sidebar.footer.action': { kind: 'list', scope: 'root' },
         'sidebar.session.action': { kind: 'hoc', scope: 'root' },

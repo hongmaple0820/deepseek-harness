@@ -28,6 +28,7 @@ kind: "package-group"
 | [`storage-json`](storage-json/README.zh.md) | 把每个单元存为一个人类可读的 JSON 文件 | 注册后端 `json` |
 | [`storage-sqlite`](storage-sqlite/README.zh.md) | 把单元作为 JSON 文档存进一个 SQLite 数据库 | 注册后端 `sqlite` |
 | [`storage-domain`](storage-domain/README.zh.md) | 在已路由后端之上提供经过 schema 校验、发出变更事件的 KV 领域 | `ctx.storageDomain` |
+| [`user-data-backup`](user-data-backup/README.zh.md) | 通过 Host 路由导出、预览并应用一个可携带的 profile 备份包 | `ctx.userDataBackup` |
 
 -----
 
