@@ -6,6 +6,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
+import { redactYaml } from './redact.ts'
 
 /** Bundle layout version written into every manifest. */
 export const BUNDLE_SCHEMA_VERSION = 1
@@ -117,7 +118,8 @@ export class BundleError extends Error {
   }
 }
 
-const PROFILE_FILES = ['package.json', 'cordis.patch.yml'] as const
+const PROFILE_FILES = ['package.json', 'cordis.patch.yml', 'pnpm-lock.yaml'] as const
+const YAML_FILE = /\.ya?ml$/
 const CREDENTIALS_FILE = '.credentials.yaml'
 
 /** Directory of the profile component inside a bundle. */
@@ -162,10 +164,14 @@ export async function collectBundleFiles(input: BundleInput): Promise<{ files: B
   const components: Partial<Record<BackupComponent, ComponentSummary>> = {}
   for (const component of input.selection.components) {
     const start = files.length
+    let redacted = component === 'settings'
     if (component === 'profile') {
       for (const name of PROFILE_FILES) {
         const data = await readIfPresent(join(input.profileDir, name))
-        if (data !== undefined) files.push({ path: PROFILE_PREFIX + name, data })
+        if (data === undefined) continue
+        const secret = YAML_FILE.test(name) ? redactYaml(new TextDecoder().decode(data)) : undefined
+        if (secret !== undefined && secret.fields > 0) redacted = true
+        files.push({ path: PROFILE_PREFIX + name, data: secret === undefined ? data : new TextEncoder().encode(secret.text) })
       }
     } else if (component === 'settings') {
       if (input.settings === undefined) throw new BundleError('settings selection requires a settings snapshot')
@@ -180,7 +186,7 @@ export async function collectBundleFiles(input: BundleInput): Promise<{ files: B
     components[component] = {
       files: added.length,
       bytes: added.reduce((total, file) => total + file.data.byteLength, 0),
-      redacted: component === 'settings',
+      redacted,
     }
   }
   const manifest: BundleManifest = {

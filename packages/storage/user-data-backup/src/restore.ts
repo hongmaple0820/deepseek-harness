@@ -17,6 +17,7 @@ import {
   type ParsedBundle,
   type SettingsSnapshot,
 } from './bundle.ts'
+import { REDACTION_MARKER, restoreRedacted } from './redact.ts'
 
 /** Directories one restore writes into and reads the running format from. */
 export interface RestoreRoots {
@@ -52,6 +53,8 @@ export interface RestorePlan {
   readonly backupDir: string
   /** Settings sections the caller applies through the settings service. */
   readonly settings?: SettingsSnapshot
+  /** Bundle paths whose redacted values no local file could fill, as "path: key, key". */
+  readonly placeholders: readonly string[]
 }
 
 const COMPONENT_PREFIXES: readonly (readonly [BackupComponent, string])[] = [
@@ -83,6 +86,22 @@ async function readTarget(target: string): Promise<Uint8Array | undefined> {
   }
 }
 
+const TEXT_FILE = /\.(?:ya?ml|json)$/i
+
+async function payloadOf(
+  file: BundleFile,
+  target: string,
+  missing: (path: string, keys: readonly string[]) => void,
+): Promise<Uint8Array> {
+  if (!TEXT_FILE.test(file.path)) return file.data
+  const text = new TextDecoder().decode(file.data)
+  if (!text.includes(REDACTION_MARKER)) return file.data
+  const current = await readTarget(target)
+  const merged = restoreRedacted(text, current === undefined ? undefined : new TextDecoder().decode(current))
+  if (merged.unresolved.length > 0) missing(file.path, merged.unresolved)
+  return new TextEncoder().encode(merged.text)
+}
+
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.byteLength !== right.byteLength) return false
   return left.every((byte, index) => byte === right[index])
@@ -110,13 +129,15 @@ export async function planRestore(bundle: ParsedBundle, roots: RestoreRoots): Pr
     )
   }
   const decisions = new Map<BackupComponent, { added: string[]; replaced: string[]; skipped: string[] }>()
+  const placeholders: string[] = []
   for (const file of bundle.files) {
     if (file.path === SETTINGS_PATH) continue
     const { component, target } = targetPath(file.path, roots)
     const entry = decisions.get(component) ?? { added: [], replaced: [], skipped: [] }
     const current = await readTarget(target)
+    const data = await payloadOf(file, target, (path, keys) => placeholders.push(path + ': ' + keys.join(', ')))
     if (current === undefined) entry.added.push(file.path)
-    else if (sameBytes(current, file.data)) entry.skipped.push(file.path)
+    else if (sameBytes(current, data)) entry.skipped.push(file.path)
     else entry.replaced.push(file.path)
     decisions.set(component, entry)
   }
@@ -130,6 +151,7 @@ export async function planRestore(bundle: ParsedBundle, roots: RestoreRoots): Pr
   return {
     components,
     backupDir: join(roots.backupRoot, 'import-' + roots.now.replaceAll(':', '-')),
+    placeholders,
     ...settings === undefined ? {} : { settings },
   }
 }
@@ -141,7 +163,7 @@ export async function planRestore(bundle: ParsedBundle, roots: RestoreRoots): Pr
  * @param roots Directories the restore targets.
  */
 export async function applyRestore(plan: RestorePlan, bundle: ParsedBundle, roots: RestoreRoots): Promise<void> {
-  const byPath = new Map(bundle.files.map(file => [file.path, file.data]))
+  const byPath = new Map<string, Uint8Array>()
   for (const component of plan.components) {
     for (const path of component.replaced) {
       const current = await readFile(targetPath(path, roots).target)
@@ -152,9 +174,11 @@ export async function applyRestore(plan: RestorePlan, bundle: ParsedBundle, root
   }
   for (const component of plan.components) {
     for (const path of [...component.added, ...component.replaced]) {
-      const data = byPath.get(path)
-      if (data === undefined) throw new BundleError('plan names ' + path + ' but the bundle does not carry it')
+      const source = bundle.files.find(file => file.path === path)
+      if (source === undefined) throw new BundleError('plan names ' + path + ' but the bundle does not carry it')
       const { target } = targetPath(path, roots)
+      const data = byPath.get(path) ?? await payloadOf(source, target, () => {})
+      byPath.set(path, data)
       await mkdir(dirname(target), { recursive: true })
       await writeFile(target, data)
     }

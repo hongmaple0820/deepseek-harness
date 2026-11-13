@@ -8,7 +8,7 @@ import { apply as hostApply } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 
 it('registers the data-management section until the plugin is disposed', async () => {
-  expect(hostApply).not.toThrow()
+  expect(() => { hostApply() }).not.toThrow()
   const ctx = new Context()
   try {
     await ctx.plugin(SlotRegistry).await()

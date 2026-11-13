@@ -1,6 +1,6 @@
-/** Export and import of this profile's portable user-data bundle. */
+/** Export, import and remote sync of this profile's portable user-data bundle. */
 import { useRef, useState } from 'react'
-import { Button, Checkbox } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Checkbox, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   BACKUP_COMPONENTS,
@@ -8,12 +8,17 @@ import {
   applyBundle,
   exportUrl,
   fetchRemoteBundle,
+  forgetRemote,
   previewBundle,
+  probeRemote,
   pushBundle,
   remoteBundles,
   remoteList,
+  saveRemote,
   type BackupComponent,
+  type ProbeResult,
   type PushReceipt,
+  type RemoteDraft,
   type RemoteListing,
   type RestorePlan,
 } from './transfer.ts'
@@ -30,6 +35,8 @@ export interface UserDataInjected {
 
 type Face = InjectFace<UserDataInjected> & PropsLocale<'settings.userData'>
 
+type Copy = PropsLocale<'settings.userData'>['t']
+
 const COMPONENT_COPY = {
   profile: 'componentProfile',
   settings: 'componentSettings',
@@ -39,8 +46,125 @@ const COMPONENT_COPY = {
 
 type Failure = 'import' | 'sync'
 
+/** Text fields the add-remote form edits; secrets stay empty until typed. */
+type Draft = {
+  id: string
+  kind: 'webdav' | 's3'
+  url: string
+  username: string
+  password: string
+  endpoint: string
+  region: string
+  bucket: string
+  accessKeyId: string
+  secretAccessKey: string
+  prefix: string
+  keep: string
+}
+
+const EMPTY_DRAFT: Draft = {
+  id: '',
+  kind: 'webdav',
+  url: '',
+  username: '',
+  password: '',
+  endpoint: '',
+  region: '',
+  bucket: '',
+  accessKeyId: '',
+  secretAccessKey: '',
+  prefix: '',
+  keep: '',
+}
+
+/** Drop blank fields so the Host applies its own defaults and keeps stored secrets. */
+function draftOf(draft: Draft): RemoteDraft {
+  const value = (text: string): string | undefined => text.trim() === '' ? undefined : text.trim()
+  const url = value(draft.url)
+  const username = value(draft.username)
+  const password = value(draft.password)
+  const endpoint = value(draft.endpoint)
+  const region = value(draft.region)
+  const bucket = value(draft.bucket)
+  const accessKeyId = value(draft.accessKeyId)
+  const secretAccessKey = value(draft.secretAccessKey)
+  const prefix = value(draft.prefix)
+  const keep = Number(draft.keep.trim())
+  return {
+    kind: draft.kind,
+    ...url === undefined ? {} : { url },
+    ...username === undefined ? {} : { username },
+    ...password === undefined ? {} : { password },
+    ...endpoint === undefined ? {} : { endpoint },
+    ...region === undefined ? {} : { region },
+    ...bucket === undefined ? {} : { bucket },
+    ...accessKeyId === undefined ? {} : { accessKeyId },
+    ...secretAccessKey === undefined ? {} : { secretAccessKey },
+    ...prefix === undefined ? {} : { prefix },
+    ...draft.keep.trim() === '' || !Number.isFinite(keep) ? {} : { keep },
+  }
+}
+
+/** Whether the form names everything the chosen transport requires. */
+function complete(draft: Draft): boolean {
+  if (draft.id.trim() === '') return false
+  return draft.kind === 'webdav' ? draft.url.trim() !== '' : draft.endpoint.trim() !== ''
+}
+
+function Field({ label, value, secret, onChange }: {
+  label: string
+  value: string
+  secret?: boolean
+  onChange: (value: string) => void
+}) {
+  return <label className={css.field}>
+    <span className={css.fieldLabel}>{label}</span>
+    <Input type={secret === true ? 'password' : 'text'} value={value}
+      onChange={(event) => { onChange(event.target.value) }} />
+  </label>
+}
+
+/** One remote row: its identity, its connection test and the bundles it holds. */
+function RemoteRow({ remote, probe, probing, syncing, t, onProbe, onRemove, onPush, onRestore }: {
+  remote: RemoteListing
+  probe: ProbeResult | undefined
+  probing: boolean
+  syncing: boolean
+  t: Copy
+  onProbe: () => void
+  onRemove: () => void
+  onPush: () => void
+  onRestore: (name: string) => void
+}) {
+  return <div className={css.remote}>
+    <div className={css.remoteHead}>
+      <span className={css.remoteId}>{remote.id}</span>
+      <span className={css.hint}>{remote.kind} · {remote.source === 'stored' ? t('remoteStored') : t('remoteConfigured')}</span>
+    </div>
+    <div className={css.actions}>
+      <Button variant="outline" size="sm" disabled={syncing || probing} onClick={onProbe}>{t('remoteTest')}</Button>
+      <Button variant="outline" size="sm" disabled={syncing} onClick={onPush}>{t('syncPush')}</Button>
+      {remote.source === 'stored' && <Button variant="ghost" size="sm" disabled={syncing} onClick={onRemove}>
+        {t('remoteDelete')}
+      </Button>}
+    </div>
+    {probe !== undefined && <p className={probe.ok ? css.ok : css.failure} role="status">
+      {probe.ok ? t('remoteReachable') + ' · ' + String(probe.entries ?? 0) : t('remoteUnreachable')}
+    </p>}
+    {remote.entries.length === 0
+      ? <p className={css.hint}>{t('syncEmpty')}</p>
+      : <ul className={css.planList}>
+        {remote.entries.map(entry => <li key={entry.name}>
+          <span>{entry.name}</span>
+          <Button variant="outline" size="sm" disabled={syncing}
+            onClick={() => { onRestore(entry.name) }}>{t('syncRestore')}</Button>
+        </li>)}
+      </ul>}
+  </div>
+}
+
 /**
- * Render the export selection, the import pipeline and their outcomes.
+ * Render the export selection, the import pipeline, the remotes and their outcomes.
  * @param props - download action and localized copy.
  * @returns the User data settings section.
  */
@@ -54,6 +178,10 @@ export function UserDataSection({ download, t }: Face) {
   const [remotes, setRemotes] = useState<readonly RemoteListing[] | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [synced, setSynced] = useState<PushReceipt | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [probing, setProbing] = useState<string | null>(null)
+  const [probes, setProbes] = useState<Readonly<Record<string, ProbeResult>>>({})
 
   const toggle = (component: BackupComponent, enabled: boolean): void => {
     setSelected(current => enabled
@@ -113,6 +241,50 @@ export function UserDataSection({ download, t }: Face) {
       setFailure('sync')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const save = async (): Promise<void> => {
+    /* v8 ignore next -- the save control renders only while the form is open. */
+    if (draft === null) return
+    setSaving(true)
+    setFailure(null)
+    try {
+      await saveRemote(draft.id.trim(), draftOf(draft))
+      setDraft(null)
+      await reload()
+    } catch {
+      setFailure('sync')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string): Promise<void> => {
+    setSyncing(true)
+    setFailure(null)
+    try {
+      await forgetRemote(id)
+      await reload()
+    } catch {
+      setFailure('sync')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const probe = async (id: string): Promise<void> => {
+    setProbing(id)
+    try {
+      const result = await probeRemote(id)
+      setProbes(current => ({ ...current, [id]: result }))
+    } catch (error) {
+      setProbes(current => ({
+        ...current,
+        [id]: { ok: false, error: error instanceof Error ? error.message : String(error) },
+      }))
+    } finally {
+      setProbing(null)
     }
   }
 
@@ -188,6 +360,10 @@ export function UserDataSection({ download, t }: Face) {
             {component.added.length > 0 && <span>{t('planAdded') + ': ' + component.added.join(', ')}</span>}
             {component.replaced.length > 0 && <span>{t('planReplaced') + ': ' + component.replaced.join(', ')}</span>}
           </li>)}
+          {(pending.plan.placeholders ?? []).map(placeholder => <li key={placeholder}>
+            <span className={css.planComponent}>{t('planPlaceholders')}</span>
+            <span>{placeholder}</span>
+          </li>)}
         </ul>
         <Button variant="primary" size="sm" disabled={busy !== null} onClick={() => { void apply() }}>
           {t('importApply')}
@@ -203,27 +379,58 @@ export function UserDataSection({ download, t }: Face) {
     <div className={css.group}>
       <h3 className={css.heading}>{t('syncHeading')}</h3>
       <p className={css.hint}>{t('syncHint')}</p>
-      <Button variant="outline" size="sm" disabled={syncing}
-        onClick={() => { void refresh() }}>{t('syncRefresh')}</Button>
-      {remotes?.map(remote => <div key={remote.id} className={css.remote}>
-        <div className={css.remoteHead}>
-          <span className={css.remoteId}>{remote.id}</span>
-          <span className={css.hint}>{remote.kind}</span>
+      <div className={css.actions}>
+        <Button variant="outline" size="sm" disabled={syncing}
+          onClick={() => { void refresh() }}>{t('syncRefresh')}</Button>
+        <Button variant="outline" size="sm" disabled={saving}
+          onClick={() => {
+            setFailure(null)
+            setDraft(draft === null ? EMPTY_DRAFT : null)
+          }}>{t('remoteAdd')}</Button>
+      </div>
+      {draft !== null && <div className={css.form}>
+        <Field label={t('remoteId')} value={draft.id}
+          onChange={(id) => { setDraft({ ...draft, id }) }} />
+        <label className={css.field}>
+          <span className={css.fieldLabel}>{t('remoteKind')}</span>
+          <select className={css.select} value={draft.kind}
+            onChange={(event) => { setDraft({ ...draft, kind: event.target.value === 's3' ? 's3' : 'webdav' }) }}>
+            <option value="webdav">{t('remoteWebdav')}</option>
+            <option value="s3">{t('remoteS3')}</option>
+          </select>
+        </label>
+        {draft.kind === 'webdav' ? <>
+          <Field label={t('remoteUrl')} value={draft.url} onChange={(url) => { setDraft({ ...draft, url }) }} />
+          <Field label={t('remoteUsername')} value={draft.username}
+            onChange={(username) => { setDraft({ ...draft, username }) }} />
+          <Field label={t('remotePassword')} secret value={draft.password}
+            onChange={(password) => { setDraft({ ...draft, password }) }} />
+        </> : <>
+          <Field label={t('remoteEndpoint')} value={draft.endpoint}
+            onChange={(endpoint) => { setDraft({ ...draft, endpoint }) }} />
+          <Field label={t('remoteRegion')} value={draft.region} onChange={(region) => { setDraft({ ...draft, region }) }} />
+          <Field label={t('remoteBucket')} value={draft.bucket} onChange={(bucket) => { setDraft({ ...draft, bucket }) }} />
+          <Field label={t('remoteAccessKey')} value={draft.accessKeyId}
+            onChange={(accessKeyId) => { setDraft({ ...draft, accessKeyId }) }} />
+          <Field label={t('remoteSecretKey')} secret value={draft.secretAccessKey}
+            onChange={(secretAccessKey) => { setDraft({ ...draft, secretAccessKey }) }} />
+        </>}
+        <Field label={t('remotePrefix')} value={draft.prefix}
+          onChange={(prefix) => { setDraft({ ...draft, prefix }) }} />
+        <Field label={t('remoteKeep')} value={draft.keep} onChange={(keep) => { setDraft({ ...draft, keep }) }} />
+        <div className={css.actions}>
+          <Button variant="primary" size="sm" disabled={saving || !complete(draft)}
+            onClick={() => { void save() }}>{t('remoteSave')}</Button>
+          <Button variant="outline" size="sm" disabled={saving}
+            onClick={() => { setDraft(null) }}>{t('remoteCancel')}</Button>
         </div>
-        <div className={css.checks}>
-          <Button variant="outline" size="sm" disabled={syncing || selected.length === 0}
-            onClick={() => { void push(remote.id) }}>{t('syncPush')}</Button>
-        </div>
-        {remote.entries.length === 0
-          ? <p className={css.hint}>{t('syncEmpty')}</p>
-          : <ul className={css.planList}>
-            {remote.entries.map(entry => <li key={entry.name}>
-              <span>{entry.name}</span>
-              <Button variant="outline" size="sm" disabled={syncing}
-                onClick={() => { void restore(remote.id, entry.name) }}>{t('syncRestore')}</Button>
-            </li>)}
-          </ul>}
-      </div>)}
+      </div>}
+      {remotes?.map(remote => <RemoteRow key={remote.id} remote={remote} t={t}
+        probe={probes[remote.id]} probing={probing === remote.id} syncing={syncing}
+        onProbe={() => { void probe(remote.id) }}
+        onRemove={() => { void remove(remote.id) }}
+        onPush={() => { void push(remote.id) }}
+        onRestore={(name) => { void restore(remote.id, name) }} />)}
       {remotes !== null && remotes.length === 0 && <p className={css.hint}>{t('syncNone')}</p>}
       {synced !== null && <p className={css.applied} role="status">{t('syncPushed')} <code>{synced.name}</code></p>}
       {failure === 'sync' && <p className={css.failure} role="alert">{t('syncFailed')}</p>}

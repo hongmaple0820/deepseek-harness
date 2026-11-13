@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-user-data-backup` 用一个 ZIP 备份包把某个 profile 带到另一台机器。它提供三个需要认证的 Host 路由：按组件选择导出备份包、预览导入会带来的变化、应用该导入。个人设置文件（`package.json` 与 `cordis.patch.yml`）与脱敏后的偏好设置快照是默认选择；会话日志与凭据需另外勾选。导入不会盲写：预览会报告新增与替换的文件，应用时先把每个被替换的文件复制到 `<DSH_HOME>/backups/<时间戳>/`。配置好的 WebDAV 与 S3 远端可把同一种备份包保存为不可变、按序递增的一组。
+`dsh-user-data-backup` 用一个 ZIP 备份包把某个 profile 带到另一台机器。它提供三个需要认证的 Host 路由：按组件选择导出备份包、预览导入会带来的变化、应用该导入。个人设置文件（`package.json`、`cordis.patch.yml` 与 `pnpm-lock.yaml`）与脱敏后的偏好设置快照是默认选择；会话日志与凭据需另外勾选。导入不会盲写：预览会报告新增与替换的文件，应用时先把每个被替换的文件复制到 `<DSH_HOME>/backups/<时间戳>/`。远端可写在插件配置里，也可由设置页添加并保存在凭据服务中；可选间隔会把新备份包推送到每个远端。
 
 ## 目录
 
@@ -32,7 +32,10 @@ kind: "package-reference"
 | `/api/user-data.export?components=profile,settings` | GET、HEAD | 带 `Content-Disposition: attachment` 的 ZIP |
 | `/api/user-data.import.preview` | POST（缓冲请求体） | `RestorePlan` JSON |
 | `/api/user-data.import` | POST（缓冲请求体） | 写入后返回 `RestorePlan` JSON |
-| `/api/user-data.remotes` | GET、HEAD | 已配置远端，形如 `{id, kind}` |
+| `/api/user-data.remotes` | GET、HEAD | 每个远端一个 `RemoteView` |
+| `/api/user-data.remotes.save` | POST（缓冲请求体） | 保存后的 `RemoteView` |
+| `/api/user-data.remotes.delete` | POST（缓冲请求体） | `{deleted: id}` |
+| `/api/user-data.remotes.test` | POST（缓冲请求体） | `{ok, entries}` 或 `{ok, error}` |
 | `/api/user-data.sync.list?id=` | GET、HEAD | 远端中的 `{entries}` |
 | `/api/user-data.sync.push?id=&components=` | POST | 上传后的 `{name, pruned}` |
 | `/api/user-data.sync.bundle?id=&name=` | GET、HEAD | 已存取的 ZIP |
@@ -43,14 +46,14 @@ kind: "package-reference"
 
 `manifest.json` 位于首位，记录备份包 schema 版本、写入方版本、profile 名、包含会话时的会话格式版本，以及每个组件的文件数、字节数与是否脱敏。其后是 `profile/`、`settings/`、`sessions/`、`credentials/` 下的组件文件。
 
-- **profile** —— 原样收录 `package.json` 与 `cordis.patch.yml`。
+- **profile** —— 原样收录 `package.json` 与 `pnpm-lock.yaml`，以及把每个疑似密钥的 YAML 值替换为标记后的 `cordis.patch.yml`。
 - **settings** —— 每个用户层的一份快照，写入 `settings/sections.json`；密钥只记录“已设置/未设置”标记，绝不记录值。
 - **sessions** —— `<DSH_HOME>/sessions/` 下的会话日志。
 - **credentials** —— 原样收录 `.credentials.yaml`；因其含真实密钥，默认关闭。
 
 ### 导入规则
 
-若备份包中的会话由不同的会话格式版本写入，导入会被拒绝并同时报出两个版本。越出组件目录的路径会被拒绝。应用时通过 `settings` 服务替换包内的偏好设置分区，因此正在运行的客户端无需重新加载即可看到新值。
+若备份包中的会话由不同的会话格式版本写入，导入会被拒绝并同时报出两个版本。越出组件目录的路径会被拒绝。应用时通过 `settings` 服务替换包内的偏好设置分区，因此正在运行的客户端无需重新加载即可看到新值。带标记的个人设置值在本机文件仍持有该值时会被复原；否则保持脱敏，计划会在 `placeholders` 下列出该字段，让导入者知道之后要补齐什么。
 
 ### 远端同步
 
@@ -76,13 +79,25 @@ remotes:
 
 缺少字段会在加载时报错，并点出远端与字段名。推送会导出一份备份包、以带时间戳的文件名上传，然后删除超出 `keep` 的最旧备份包（默认 10；`0` 表示全部保留）。已上传的备份包永不被覆盖：文件名带有到毫秒的创建时间。列举与下载只读；恢复远端备份包复用带预览的导入路径，因此来自另一台机器的包会先被检查再落盘。
 
+从设置页添加的远端保存在凭据服务的 `user-data-backup` 作用域下，以远端 id 为键，`/api/user-data.remotes` 会报告每个远端的来源。保存已有 id 时，留空的密钥字段沿用已存的值。`/api/user-data.remotes.test` 只列出远端而不写入，设置页的**测试**按钮报告的就是这一结果。
+
+间隔推送会对每个远端重复同一次上传：
+
+```yaml
+schedule:
+  everyMinutes: 60
+  components: [profile, settings]
+```
+
+`everyMinutes` 小于等于 0 表示关闭，`components` 默认为个人设置与偏好设置两者。计时器只在 Host 运行期间生效，每轮只导出一次备份包，并把同一份内容发往全部远端。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
 <summary>实现细节——点击展开</summary>
 
-`bundle.ts` 负责采集、manifest 约定、用 `fflate` 生成 ZIP，以及把 manifest 读在最前。`restore.ts` 是纯路径规划：把包内前缀映射到 profile 目录、`<DSH_HOME>/sessions` 与 `<DSH_HOME>`，拒绝越界与未知前缀，并把偏好设置快照从文件决策中分离。`remote.ts` 是传输层：基于 `PROPFIND`/`PUT`/`GET`/`DELETE` 的 WebDAV 客户端，与用 `node:crypto` 签名 SigV4 `ListObjectsV2`/`PutObject`/`GetObject`/`DeleteObject` 的 S3 客户端，统一在 `list`/`put`/`get`/`remove` 接口之后，另有 `pruneRemote`。`index.ts` 是 Cordis 服务：生成备份包、在 Connection 上注册路由、先把被替换的文件复制进备份目录再应用计划，并把每个配置好的远端变成上述接口。
+`bundle.ts` 负责采集、manifest 约定、用 `fflate` 生成 ZIP，以及把 manifest 读在最前。`restore.ts` 是纯路径规划：把包内前缀映射到 profile 目录、`<DSH_HOME>/sessions` 与 `<DSH_HOME>`，拒绝越界与未知前缀，并把偏好设置快照从文件决策中分离。`remote.ts` 是传输层：基于 `PROPFIND`/`PUT`/`GET`/`DELETE` 的 WebDAV 客户端，与用 `node:crypto` 签名 SigV4 `ListObjectsV2`/`PutObject`/`GetObject`/`DeleteObject` 的 S3 客户端，统一在 `list`/`put`/`get`/`remove` 接口之后，另有 `pruneRemote`。`redact.ts` 按缩进路径遍历 YAML 赋值，把疑似密钥的值替换为标记，导入时再从本机文件取回。`remote-store.ts` 校验远端、把它投影成带“已设置/未设置”密钥标记的 `RemoteView`，并通过 `credentials` 服务读写本机添加的远端。`index.ts` 是 Cordis 服务：生成备份包、在 Connection 上注册路由、先把被替换的文件复制进备份目录再应用计划，把配置来源与本机添加的远端合成一张表，并运行间隔推送。
 
 </details>
 
@@ -109,6 +124,8 @@ remotes:
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- 个人设置脱敏只覆盖键名以疑似密钥词结尾的 YAML 赋值；写在其它键名下的密钥会原样收录。
+- 间隔推送只在 Host 运行期间发生；没有任何逻辑监听文件变化，两台机器仍会留下两组序列。
 - 同步只对接 WebDAV 与 S3；其它后端需要自行实现 `list`/`put`/`get`/`remove`。
 - 两台机器推送同一 profile 时会在远端留下两组序列，不做合并或比较。
 - 导出路由同步读取整个 profile；勾选很大的 `sessions/` 时请求会一直持续到 ZIP 完成。

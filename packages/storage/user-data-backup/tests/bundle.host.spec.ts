@@ -132,6 +132,35 @@ describe('writing and reading a bundle', () => {
   })
 })
 
+it('carries the lock file and redacts secrets in the composition file', async () => {
+  const root = await tempRoot()
+  const profileDir = join(root, 'profiles', 'web')
+  await mkdir(profileDir, { recursive: true })
+  await writeFile(join(profileDir, 'package.json'), '{"name":"web"}')
+  await writeFile(join(profileDir, 'cordis.patch.yml'), 'plugins:\n  - id: llm\n    config:\n      apiKey: sk-live\n      model: fast\n')
+  await writeFile(join(profileDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+
+  const { files, manifest } = await collectBundleFiles({
+    profile: 'web',
+    dshVersion: '0.2.2-rc.3',
+    createdAt: '2026-11-13T10:00:00.000Z',
+    profileDir,
+    home: root,
+    selection: { components: ['profile'] },
+  })
+
+  expect(files.map(file => file.path)).toEqual([
+    'profile/package.json',
+    'profile/cordis.patch.yml',
+    'profile/pnpm-lock.yaml',
+  ])
+  const patch = files.find(file => file.path === 'profile/cordis.patch.yml')
+  expect(new TextDecoder().decode(patch?.data)).toContain('apiKey: "__DSH_REDACTED__"')
+  expect(new TextDecoder().decode(patch?.data)).toContain('model: fast')
+  expect(manifest.components.profile?.files).toBe(3)
+  expect(manifest.components.profile?.redacted).toBe(true)
+})
+
 it('surfaces a profile entry that exists but cannot be read', async () => {
   const root = await tempRoot()
   const profileDir = join(root, 'profiles', 'web')
