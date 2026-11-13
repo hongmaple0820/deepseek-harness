@@ -4932,7 +4932,7 @@ export type ApprovalPolicy = 'ask' | 'never'
 ## `@deepseek-ai/dsh-user-data-backup`
 
 - `inject`: `connection`
-- `source`: [`packages/storage/user-data-backup/src/index.ts:126`](../packages/storage/user-data-backup/src/index.ts)
+- `source`: [`packages/storage/user-data-backup/src/index.ts:128`](../packages/storage/user-data-backup/src/index.ts)
 
 ```ts config-catalog
 /** Backup policy. */
@@ -4941,9 +4941,11 @@ export interface Config {
   readonly dshVersion?: string
   /** Remotes a push may address, by id. */
   readonly remotes?: Record<string, RemoteSettings>
+  /** Recurring push, so a machine keeps a remote copy without anyone pressing a button. */
+  readonly schedule?: ScheduleConfig
 }
 
-/** One configured remote as cordis.yml spells it. */
+/** One remote target as configuration or the settings page spells it. */
 export interface RemoteSettings {
   /** Transport the remote speaks. */
   readonly kind: 'webdav' | 's3'
@@ -4968,6 +4970,17 @@ export interface RemoteSettings {
   /** Newest bundles a push keeps on this remote. */
   readonly keep?: number
 }
+
+/** Recurring push to every remote; off unless configured. */
+export interface ScheduleConfig {
+  /** Minutes between automatic pushes; absent or 0 arms no timer. */
+  readonly everyMinutes?: number
+  /** Components an automatic push includes; the export default when absent. */
+  readonly components?: BackupComponent[]
+}
+
+/** Components a caller may include in a bundle. */
+export type BackupComponent = 'profile' | 'settings' | 'sessions' | 'credentials'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-user-data-backup -->
 

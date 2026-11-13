@@ -115,7 +115,7 @@ it('lists the configured remotes with the bundles they store', async () => {
   render(<UserDataSection {...sectionProps()} />)
   fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
   await screen.findByText('dsh-web-1.zip')
-  expect(screen.getByText('webdav')).toBeTruthy()
+  expect(screen.getByText(/webdav/)).toBeTruthy()
   expect(screen.getByRole('button', { name: en.syncRestore })).toBeTruthy()
 })
 
@@ -218,6 +218,226 @@ it('reports a refused push and keeps the listing', async () => {
   fireEvent.click(screen.getByRole('button', { name: en.syncPush }))
   await screen.findByText(en.syncFailed)
   expect(screen.getByText('dsh-web-1.zip')).toBeTruthy()
+})
+
+function remote(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'dav', kind: 'webdav', source: 'stored', url: 'https://dav.example.com/dsh', keep: 10,
+    secrets: { username: true, password: true, accessKeyId: false, secretAccessKey: false },
+    ...overrides,
+  }
+}
+
+interface Posted {
+  readonly path: string
+  readonly body: unknown
+}
+
+function recording(handlers: Record<string, (body: unknown) => Response>): Posted[] {
+  const posted: Posted[] = []
+  stubFetch(async (input, init) => {
+    const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+    const path = url.split('?')[0] ?? url
+    const raw = init?.body
+    const body: unknown = typeof raw === 'string' ? JSON.parse(raw) : undefined
+    const handler = handlers[path]
+    if (handler === undefined) throw new Error('unexpected route ' + url)
+    if (init?.method === 'POST') posted.push({ path, body })
+    return handler(body)
+  })
+  return posted
+}
+
+it('adds a remote from the form and reloads the listing', async () => {
+  const posted = recording({
+    '/api/user-data.remotes': () => json([remote()]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+    '/api/user-data.remotes.save': () => json(remote()),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  fireEvent.change(screen.getByLabelText(en.remoteId), { target: { value: 'dav' } })
+  fireEvent.change(screen.getByLabelText(en.remoteUrl), { target: { value: 'https://dav.example.com/dsh' } })
+  fireEvent.change(screen.getByLabelText(en.remoteUsername), { target: { value: 'me' } })
+  fireEvent.change(screen.getByLabelText(en.remotePassword), { target: { value: 'secret' } })
+  fireEvent.change(screen.getByLabelText(en.remotePrefix), { target: { value: 'backups' } })
+  fireEvent.click(screen.getByRole('button', { name: en.remoteSave }))
+
+  await screen.findByText(new RegExp(en.remoteStored))
+  expect(posted).toEqual([{
+    path: '/api/user-data.remotes.save',
+    body: {
+      id: 'dav',
+      remote: { kind: 'webdav', url: 'https://dav.example.com/dsh', username: 'me', password: 'secret', prefix: 'backups' },
+    },
+  }])
+  expect(screen.queryByRole('button', { name: en.remoteSave })).toBeNull()
+})
+
+it('adds an S3 remote once the endpoint names it', async () => {
+  const posted = recording({
+    '/api/user-data.remotes': () => json([]),
+    '/api/user-data.remotes.save': () => json(remote({ kind: 's3' })),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  fireEvent.change(screen.getByLabelText(en.remoteId), { target: { value: 'bucket' } })
+  fireEvent.change(screen.getByLabelText(en.remoteKind), { target: { value: 's3' } })
+  expect(screen.queryByLabelText(en.remoteUrl)).toBeNull()
+  expect(screen.getByRole('button', { name: en.remoteSave }).hasAttribute('disabled')).toBe(true)
+
+  fireEvent.change(screen.getByLabelText(en.remoteEndpoint), { target: { value: 'https://s3.example.com' } })
+  fireEvent.change(screen.getByLabelText(en.remoteRegion), { target: { value: 'us-east-1' } })
+  fireEvent.change(screen.getByLabelText(en.remoteBucket), { target: { value: 'dsh' } })
+  fireEvent.change(screen.getByLabelText(en.remoteAccessKey), { target: { value: 'id' } })
+  fireEvent.change(screen.getByLabelText(en.remoteSecretKey), { target: { value: 'key' } })
+  fireEvent.change(screen.getByLabelText(en.remoteKeep), { target: { value: '3' } })
+  fireEvent.click(screen.getByRole('button', { name: en.remoteSave }))
+
+  await screen.findByText(en.syncNone)
+  expect(posted[0]?.body).toEqual({
+    id: 'bucket',
+    remote: {
+      kind: 's3', endpoint: 'https://s3.example.com', region: 'us-east-1', bucket: 'dsh',
+      accessKeyId: 'id', secretAccessKey: 'key', keep: 3,
+    },
+  })
+})
+
+it('keeps the form open and reports a refused save', async () => {
+  recording({
+    '/api/user-data.remotes.save': () => json({}, 500),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  fireEvent.change(screen.getByLabelText(en.remoteId), { target: { value: 'dav' } })
+  fireEvent.change(screen.getByLabelText(en.remoteUrl), { target: { value: 'https://dav.example.com/dsh' } })
+  fireEvent.click(screen.getByRole('button', { name: en.remoteSave }))
+  await screen.findByText(en.syncFailed)
+  expect(screen.getByRole('button', { name: en.remoteSave })).toBeTruthy()
+})
+
+it('closes the form without saving', () => {
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  fireEvent.click(screen.getByRole('button', { name: en.remoteCancel }))
+  expect(screen.queryByLabelText(en.remoteId)).toBeNull()
+})
+
+it('forgets a stored remote and reports the count a probe saw', async () => {
+  const posted: string[] = []
+  let stored = [remote()]
+  stubFetch(async (input, init) => {
+    const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+    const path = url.split('?')[0] ?? url
+    if (init?.method === 'POST') posted.push(path)
+    if (path === '/api/user-data.remotes.test') return json({ ok: true, entries: 2 })
+    if (path === '/api/user-data.remotes.delete') {
+      stored = []
+      return json({ deleted: 'dav' })
+    }
+    if (path === '/api/user-data.sync.list') return json({ entries: [] })
+    return json(stored)
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
+  fireEvent.click(await screen.findByRole('button', { name: en.remoteTest }))
+  expect(await screen.findByText(en.remoteReachable + ' · 2')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: en.remoteDelete })).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: en.remoteDelete }))
+  await screen.findByText(en.syncNone)
+  expect(posted).toEqual(['/api/user-data.remotes.test', '/api/user-data.remotes.delete'])
+})
+
+it('keeps a stored remote listed when it cannot be removed', async () => {
+  stubFetch(async (input) => {
+    const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+    const path = url.split('?')[0] ?? url
+    if (path === '/api/user-data.remotes.delete') return json({}, 500)
+    if (path === '/api/user-data.sync.list') return json({ entries: [] })
+    return json([remote()])
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
+  fireEvent.click(await screen.findByRole('button', { name: en.remoteDelete }))
+
+  await screen.findByText(en.syncFailed)
+  expect(screen.getByText('dav')).toBeTruthy()
+})
+it('reports the placeholders an imported bundle leaves to fill in', async () => {
+  const placeholders: RestorePlan = { ...plan, placeholders: ['profile/cordis.patch.yml: plugins.config.apiKey'] }
+  vi.stubGlobal('fetch', async () => json(placeholders))
+  section()
+  fireEvent.change(screen.getByLabelText(en.importAction), {
+    target: { files: [new File(['bundle'], 'dsh-web.zip', { type: 'application/zip' })] },
+  })
+  await screen.findByText(en.planTitle)
+  expect(screen.getByText('profile/cordis.patch.yml: plugins.config.apiKey')).toBeTruthy()
+  expect(screen.getByText(en.planPlaceholders)).toBeTruthy()
+})
+
+it('reports a remote whose probe was refused', async () => {
+  routed({
+    '/api/user-data.remotes': () => json([remote()]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+    '/api/user-data.remotes.test': () => new Response('broken', { status: 500 }),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
+  fireEvent.click(await screen.findByRole('button', { name: en.remoteTest }))
+  await screen.findByText(en.remoteUnreachable)
+})
+
+it('reports a probe that answers without a count', async () => {
+  routed({
+    '/api/user-data.remotes': () => json([remote()]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+    '/api/user-data.remotes.test': () => json({ ok: true }),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
+  fireEvent.click(await screen.findByRole('button', { name: en.remoteTest }))
+  await screen.findByText(en.remoteReachable + ' · 0')
+})
+
+it('reports a probe whose transport failed without an error object', async () => {
+  routed({
+    '/api/user-data.remotes': () => json([remote()]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+    '/api/user-data.remotes.test': () => {
+      throw 'offline'
+    },
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.syncRefresh }))
+  fireEvent.click(await screen.findByRole('button', { name: en.remoteTest }))
+  await screen.findByText(en.remoteUnreachable)
+})
+
+it('opens and closes the remote form with the same control', async () => {
+  routed({
+    '/api/user-data.remotes': () => json([]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  expect(screen.getByLabelText(en.remoteUrl)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  expect(screen.queryByLabelText(en.remoteUrl)).toBeNull()
+})
+
+it('switches the form back to webdav', () => {
+  routed({
+    '/api/user-data.remotes': () => json([]),
+    '/api/user-data.sync.list': () => json({ entries: [] }),
+  })
+  section()
+  fireEvent.click(screen.getByRole('button', { name: en.remoteAdd }))
+  fireEvent.change(screen.getByLabelText(en.remoteKind), { target: { value: 's3' } })
+  expect(screen.queryByLabelText(en.remoteUrl)).toBeNull()
+  fireEvent.change(screen.getByLabelText(en.remoteKind), { target: { value: 'webdav' } })
+  expect(screen.getByLabelText(en.remoteUrl)).toBeTruthy()
 })
 
 it('reports a refused remote download', async () => {

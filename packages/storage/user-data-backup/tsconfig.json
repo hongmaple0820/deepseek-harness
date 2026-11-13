@@ -21,6 +21,9 @@
       "path": "../../settings/settings"
     },
     {
+      "path": "../../credentials/credentials"
+    },
+    {
       "path": "../../core/session"
     }
   ]

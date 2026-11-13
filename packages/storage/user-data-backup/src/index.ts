@@ -6,6 +6,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import Schema from '@deepseek-ai/schemastery'
 import type { SettingsDescriptor } from '@deepseek-ai/dsh-settings'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session/types'
@@ -22,12 +23,26 @@ import {
 } from './bundle.ts'
 import type { RemoteTarget } from './remote.ts'
 import { createRemote, pruneRemote } from './remote.ts'
+import {
+  DEFAULT_KEEP,
+  type RemoteSettings,
+  type RemoteView,
+  deleteRemote as dropRemote,
+  readStoredRemotes,
+  saveRemote as writeRemote,
+  validateRemote,
+  withStoredSecrets,
+  viewOf,
+} from './remote-store.ts'
 import { type RestorePlan, applyRestore, planRestore } from './restore.ts'
 import {
   USER_DATA_EXPORT_PATH,
   USER_DATA_IMPORT_PATH,
   USER_DATA_IMPORT_PREVIEW_PATH,
+  USER_DATA_REMOTES_DELETE_PATH,
   USER_DATA_REMOTES_PATH,
+  USER_DATA_REMOTES_SAVE_PATH,
+  USER_DATA_REMOTES_TEST_PATH,
   USER_DATA_SYNC_BUNDLE_PATH,
   USER_DATA_SYNC_LIST_PATH,
   USER_DATA_SYNC_PUSH_PATH,
@@ -36,11 +51,16 @@ import {
 export * from './bundle.ts'
 export * from './restore.ts'
 export * from './remote.ts'
+export * from './remote-store.ts'
+export * from './redact.ts'
 export {
   USER_DATA_EXPORT_PATH,
   USER_DATA_IMPORT_PATH,
   USER_DATA_IMPORT_PREVIEW_PATH,
+  USER_DATA_REMOTES_DELETE_PATH,
   USER_DATA_REMOTES_PATH,
+  USER_DATA_REMOTES_SAVE_PATH,
+  USER_DATA_REMOTES_TEST_PATH,
   USER_DATA_SYNC_BUNDLE_PATH,
   USER_DATA_SYNC_LIST_PATH,
   USER_DATA_SYNC_PUSH_PATH,
@@ -96,30 +116,12 @@ interface ConnectionLike {
   }
 }
 
-/** One configured remote as cordis.yml spells it. */
-export interface RemoteSettings {
-  /** Transport the remote speaks. */
-  readonly kind: 'webdav' | 's3'
-  /** WebDAV collection URL. */
-  readonly url?: string
-  /** WebDAV basic-auth user. */
-  readonly username?: string
-  /** WebDAV basic-auth password. */
-  readonly password?: string
-  /** S3 endpoint origin. */
-  readonly endpoint?: string
-  /** S3 signing region. */
-  readonly region?: string
-  /** S3 bucket name. */
-  readonly bucket?: string
-  /** S3 access key id. */
-  readonly accessKeyId?: string
-  /** S3 secret access key. */
-  readonly secretAccessKey?: string
-  /** Prefix below the collection or bucket root. */
-  readonly prefix?: string
-  /** Newest bundles a push keeps on this remote. */
-  readonly keep?: number
+/** Recurring push to every remote; off unless configured. */
+export interface ScheduleConfig {
+  /** Minutes between automatic pushes; absent or 0 arms no timer. */
+  readonly everyMinutes?: number
+  /** Components an automatic push includes; the export default when absent. */
+  readonly components?: BackupComponent[]
 }
 
 /** Backup policy. */
@@ -128,6 +130,8 @@ export interface Config {
   readonly dshVersion?: string
   /** Remotes a push may address, by id. */
   readonly remotes?: Record<string, RemoteSettings>
+  /** Recurring push, so a machine keeps a remote copy without anyone pressing a button. */
+  readonly schedule?: ScheduleConfig
 }
 
 /** Validate backup policy. */
@@ -146,14 +150,16 @@ export const Config: Schema<Config> = Schema.object({
     prefix: Schema.string(),
     keep: Schema.number(),
   })),
+  schedule: Schema.object({
+    everyMinutes: Schema.number(),
+    components: Schema.array(Schema.union(BACKUP_COMPONENTS)),
+  }),
 })
 
 const TIMESTAMP_ENCODER = (date: Date): string => date.toISOString()
 
-/** Bundles a push keeps when its remote sets no budget. */
-const DEFAULT_KEEP = 10
-
 interface ConfiguredRemote {
+  readonly settings: RemoteSettings
   readonly kind: 'webdav' | 's3'
   readonly target: RemoteTarget
   readonly keep: number
@@ -169,6 +175,7 @@ function remoteOf(id: string, settings: RemoteSettings): ConfiguredRemote {
   const keep = settings.keep ?? DEFAULT_KEEP
   if (settings.kind === 'webdav') {
     return {
+      settings,
       kind: 'webdav',
       keep,
       target: createRemote({
@@ -181,6 +188,7 @@ function remoteOf(id: string, settings: RemoteSettings): ConfiguredRemote {
     }
   }
   return {
+    settings,
     kind: 's3',
     keep,
     target: createRemote({
@@ -246,12 +254,16 @@ export default class UserDataBackup extends Service {
 
   private readonly dshVersion: string | undefined
 
-  private readonly remotes: ReadonlyMap<string, ConfiguredRemote>
+  private readonly configuredRemotes: ReadonlyMap<string, ConfiguredRemote>
+
+  private readonly schedule: ScheduleConfig
+
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'userDataBackup')
     this.dshVersion = config.dshVersion
-    this.remotes = new Map(Object.entries(config.remotes ?? {}).map(([id, settings]) => [id, remoteOf(id, settings)]))
+    this.configuredRemotes = new Map(Object.entries(config.remotes ?? {}).map(([id, settings]) => [id, remoteOf(id, settings)]))
+    this.schedule = config.schedule ?? {}
     ctx.effect(() => {
       const connection = ctx.get('connection') as ConnectionLike | undefined
       /* v8 ignore next -- connection is a declared required inject, so cordis never activates this plugin without it. */
@@ -279,7 +291,25 @@ export default class UserDataBackup extends Service {
           path: USER_DATA_REMOTES_PATH,
           methods: ['GET', 'HEAD'],
           requestBody: 'buffered',
-          fetch: () => Promise.resolve(this.remotesResponse()),
+          fetch: () => this.remotesResponse(),
+        }),
+        connection.fetch.register({
+          path: USER_DATA_REMOTES_SAVE_PATH,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: request => this.saveResponse(request),
+        }),
+        connection.fetch.register({
+          path: USER_DATA_REMOTES_DELETE_PATH,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: request => this.deleteResponse(request),
+        }),
+        connection.fetch.register({
+          path: USER_DATA_REMOTES_TEST_PATH,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: request => this.testResponse(request),
         }),
         connection.fetch.register({
           path: USER_DATA_SYNC_PUSH_PATH,
@@ -304,6 +334,14 @@ export default class UserDataBackup extends Service {
         for (const dispose of disposers) void dispose()
       }
     })
+    const every = this.schedule.everyMinutes ?? 0
+    if (every > 0) {
+      const timer = setInterval(() => {
+        void this.syncNow().catch((error: unknown) => { this.ctx.logger.error(error) })
+      }, every * 60_000)
+      timer.unref()
+      ctx.effect(() => () => { clearInterval(timer) })
+    }
   }
 
   /** Active profile facts the routes read on every request. */
@@ -398,16 +436,121 @@ export default class UserDataBackup extends Service {
     return json(await this.applyImport(new Uint8Array(await request.arrayBuffer())))
   }
 
-  private remoteOf(request: Request): ConfiguredRemote {
-    const id = new URL(request.url).searchParams.get('id')
+  private get credentials(): CredentialProvider | undefined {
+    return this.ctx.get('credentials')
+  }
+
+  private store(): CredentialProvider {
+    const credentials = this.credentials
+    if (credentials === undefined) throw new Error('this deployment has no credential store, so remotes come from configuration only')
+    return credentials
+  }
+
+  private async entries(): Promise<{ id: string; remote: ConfiguredRemote; source: 'config' | 'stored' }[]> {
+    const entries: { id: string; remote: ConfiguredRemote; source: 'config' | 'stored' }[] =
+      [...this.configuredRemotes].map(([id, remote]) => ({ id, remote, source: 'config' }))
+    for (const [id, settings] of await readStoredRemotes(this.credentials)) {
+      if (this.configuredRemotes.has(id)) throw new Error('remote ' + id + ' is configured both in configuration and on this machine')
+      entries.push({ id, remote: remoteOf(id, settings), source: 'stored' })
+    }
+    return entries
+  }
+
+  /**
+   * Every remote a push may address.
+   * @returns Configured transports by id, configuration first.
+   */
+  async remotes(): Promise<Map<string, ConfiguredRemote>> {
+    return new Map((await this.entries()).map(entry => [entry.id, entry.remote]))
+  }
+
+  /**
+   * Describe every remote for the settings page, without secret values.
+   * @returns One view per remote, configuration first.
+   */
+  async listRemotes(): Promise<RemoteView[]> {
+    return (await this.entries()).map(entry => viewOf(entry.id, entry.remote.settings, entry.source))
+  }
+
+  /**
+   * Add or replace a remote the settings page manages.
+   * @param id Id a push addresses the remote by.
+   * @param settings Fields the settings page submitted.
+   * @returns The view the page stores.
+   */
+  async saveRemote(id: string, settings: RemoteSettings): Promise<RemoteView> {
+    const stored = (await readStoredRemotes(this.store())).get(id)
+    const validated = validateRemote(id, withStoredSecrets(settings, stored))
+    await writeRemote(this.store(), id, validated)
+    return viewOf(id, validated, 'stored')
+  }
+
+  /**
+   * Remove a remote the settings page added.
+   * @param id Id of the remote to forget.
+   * @returns Resolves once the record is gone.
+   */
+  async forgetRemote(id: string): Promise<void> {
+    if (this.configuredRemotes.has(id)) throw new Error('remote ' + id + ' comes from configuration and cannot be removed here')
+    await dropRemote(this.store(), id)
+  }
+
+  /**
+   * Probe one remote with a single listing request.
+   * @param id Id of the remote to probe.
+   * @returns Whether the transport answered, how many bundles it holds, or why it failed.
+   */
+  async probeRemote(id: string): Promise<{ ok: boolean; entries?: number; error?: string }> {
+    const remote = await this.resolveRemote(id)
+    try {
+      return { ok: true, entries: (await remote.target.list()).length }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  private async resolveRemote(id: string | null): Promise<ConfiguredRemote> {
     if (id === null || id === '') throw new Error('a remote id is required')
-    const remote = this.remotes.get(id)
+    const remote = (await this.remotes()).get(id)
     if (remote === undefined) throw new Error('unknown remote: ' + id)
     return remote
   }
 
-  private remotesResponse(): Response {
-    return json([...this.remotes].map(([id, remote]) => ({ id, kind: remote.kind })))
+  private async remotesResponse(): Promise<Response> {
+    return json(await this.listRemotes())
+  }
+
+  private async saveResponse(request: Request): Promise<Response> {
+    const body = JSON.parse(await request.text()) as { id?: unknown; remote?: unknown }
+    if (typeof body.id !== 'string') throw new Error('a remote id is required')
+    return json(await this.saveRemote(body.id, body.remote as RemoteSettings))
+  }
+
+  private async deleteResponse(request: Request): Promise<Response> {
+    const body = JSON.parse(await request.text()) as { id?: unknown }
+    if (typeof body.id !== 'string') throw new Error('a remote id is required')
+    await this.forgetRemote(body.id)
+    return json({ deleted: body.id })
+  }
+
+  private async testResponse(request: Request): Promise<Response> {
+    const body = JSON.parse(await request.text()) as { id?: unknown }
+    if (typeof body.id !== 'string') throw new Error('a remote id is required')
+    return json(await this.probeRemote(body.id))
+  }
+
+  /**
+   * Upload a fresh bundle to every remote, pruning what each keeps beyond its budget.
+   * @returns Resolves once every remote accepted its bundle.
+   */
+  async syncNow(): Promise<void> {
+    const components = this.schedule.components ?? DEFAULT_COMPONENTS
+    let exported: ExportedBundle | undefined
+    for (const remote of (await this.remotes()).values()) {
+      exported ??= await this.exportBundle({ components })
+      await remote.target.put(exported.fileName, exported.bytes)
+      await pruneRemote(remote.target, remote.keep)
+    }
   }
 
   /**
@@ -416,7 +559,7 @@ export default class UserDataBackup extends Service {
    * @returns Stored name and the pruned names.
    */
   private async pushResponse(request: Request): Promise<Response> {
-    const remote = this.remoteOf(request)
+    const remote = await this.resolveRemote(new URL(request.url).searchParams.get('id'))
     const selection = { components: parseComponents(new URL(request.url).searchParams.get('components')) }
     const exported = await this.exportBundle(selection)
     await remote.target.put(exported.fileName, exported.bytes)
@@ -424,13 +567,13 @@ export default class UserDataBackup extends Service {
   }
 
   private async listResponse(request: Request): Promise<Response> {
-    return json({ entries: await this.remoteOf(request).target.list() })
+    return json({ entries: await (await this.resolveRemote(new URL(request.url).searchParams.get('id'))).target.list() })
   }
 
   private async bundleResponse(request: Request): Promise<Response> {
     const name = new URL(request.url).searchParams.get('name')
     if (name === null || name === '') throw new Error('a bundle name is required')
-    const bytes = await this.remoteOf(request).target.get(name)
+    const bytes = await (await this.resolveRemote(new URL(request.url).searchParams.get('id'))).target.get(name)
     return new Response(new Blob([new Uint8Array(bytes)]), {
       headers: {
         'content-type': 'application/zip',

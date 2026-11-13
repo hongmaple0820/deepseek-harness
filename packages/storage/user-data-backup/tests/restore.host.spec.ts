@@ -110,6 +110,39 @@ describe('applying a restore', () => {
     expect(await readFile(join(plan.backupDir, 'profile', 'package.json'), 'utf8')).toBe('old')
   })
 
+  it('keeps the local secret when the bundle only carries its marker', async () => {
+    const root = await tempRoot()
+    const rootsForPlan = restoreRoots(root)
+    await mkdir(rootsForPlan.profileDir, { recursive: true })
+    await writeFile(join(rootsForPlan.profileDir, 'cordis.patch.yml'), 'plugins:\n  - id: llm\n    config:\n      apiKey: sk-local\n      model: old\n')
+    const bundle = bundleWith([{
+      path: 'profile/cordis.patch.yml',
+      text: 'plugins:\n  - id: llm\n    config:\n      apiKey: "__DSH_REDACTED__"\n      model: new\n',
+    }])
+    const plan = await planRestore(bundle, rootsForPlan)
+    expect(plan.placeholders).toEqual([])
+    await applyRestore(plan, bundle, rootsForPlan)
+
+    expect(await readFile(join(rootsForPlan.profileDir, 'cordis.patch.yml'), 'utf8'))
+      .toBe('plugins:\n  - id: llm\n    config:\n      apiKey: sk-local\n      model: new\n')
+    expect(await readFile(join(plan.backupDir, 'profile', 'cordis.patch.yml'), 'utf8'))
+      .toContain('apiKey: sk-local')
+  })
+
+  it('names the marked paths no local file could fill', async () => {
+    const root = await tempRoot()
+    const rootsForPlan = restoreRoots(root)
+    const bundle = bundleWith([{
+      path: 'profile/cordis.patch.yml',
+      text: 'plugins:\n  - id: llm\n    config:\n      apiKey: "__DSH_REDACTED__"\n',
+    }])
+    const plan = await planRestore(bundle, rootsForPlan)
+    expect(plan.placeholders).toEqual(['profile/cordis.patch.yml: plugins.config.apiKey'])
+    await applyRestore(plan, bundle, rootsForPlan)
+    expect(await readFile(join(rootsForPlan.profileDir, 'cordis.patch.yml'), 'utf8'))
+      .toContain('apiKey: "__DSH_REDACTED__"')
+  })
+
   it('refuses a plan that names a file the bundle does not carry', async () => {
     const root = await tempRoot()
     const rootsForPlan = restoreRoots(root)
