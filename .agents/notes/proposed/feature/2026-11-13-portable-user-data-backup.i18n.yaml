@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for 2026-11-13-portable-user-data-backup.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-11-13-portable-user-data-backup.md
+/agent-note-portable-user-data-backup-and-sync:
+  en: e839496b88d769b8
+  zh: 37c59f4f18755e27
+/agent-note-portable-user-data-backup-and-sync/problem:
+  en: 982d2f23c2a072af
+  zh: d4d1e30b1e7dbabb
+/agent-note-portable-user-data-backup-and-sync/proposal:
+  en: 7a3b8b6ef4202f3a
+  zh: 3756b6a4314ec257
+/agent-note-portable-user-data-backup-and-sync/proposal/bundle-contents:
+  en: 626f8de3cb70f9be
+  zh: 02bb0408eb6f3ad1
+/agent-note-portable-user-data-backup-and-sync/proposal/export-and-import:
+  en: a56b1dbb0700b0ff
+  zh: 743230d0330b361b
+/agent-note-portable-user-data-backup-and-sync/proposal/sync:
+  en: bff605a525303d07
+  zh: 49a6c9e5df63aa66
+/agent-note-portable-user-data-backup-and-sync/alternatives-considered:
+  en: 5135466ca31ab221
+  zh: 4e1b13ca2fdcd95c
+/agent-note-portable-user-data-backup-and-sync/acceptance-criteria:
+  en: 35e570ab68ff49fe
+  zh: 4cd53f613c00d6e7
+/agent-note-portable-user-data-backup-and-sync/risks:
+  en: 3e8c79fc7cf6a57a
+  zh: b24d844f7021e7bc
