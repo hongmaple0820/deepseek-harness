@@ -344,10 +344,6 @@ function SessionTree({
   const currentGroup = current === undefined || !workspaceReady
     ? undefined
     : owningGroupKey(workspaces, current)
-  useEffect(() => {
-    if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
-    setGroupExpanded(currentGroup, true)
-  }, [current, currentGroup, setGroupExpanded, groupExpansion])
   const parents = useMemo(() => {
     if (!nestWorkspaces) return new Map<string, WorkspaceId | undefined>()
     const keysByPath = new Map(workspaces.map(workspace => [workspace.path, workspace.workspaceId]))
