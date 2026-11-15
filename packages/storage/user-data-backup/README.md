@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-user-data-backup` carries one profile between machines as a single ZIP bundle. It serves three authenticated Host routes: export a bundle from a component selection, preview what importing a bundle would change, and apply that import. Profile files (`package.json`, `cordis.patch.yml`, and `pnpm-lock.yaml`) and the redacted settings snapshot are the default selection; Session logs and credentials are additive. Import never writes blind: the preview reports added and replaced files, and applying first copies every replaced file into `<DSH_HOME>/backups/<timestamp>/`. Remotes come from the plugin config or from the settings page, which keeps what it adds in the credential store, and an optional interval pushes a fresh bundle to each of them.
+`dsh-user-data-backup` carries one profile between machines as a single ZIP bundle over three authenticated Host routes: export, preview an import, and apply it. Profile files (`package.json`, `cordis.patch.yml`, `pnpm-lock.yaml`) and the redacted settings snapshot are the default selection; Session logs and credentials are additive. Import never writes blind: the preview reports added and replaced files, and applying first copies each replaced file into `<DSH_HOME>/backups/<timestamp>/`. Remotes come from the plugin config or the settings page, and an optional interval pushes a fresh bundle to each.
 
 ## Table of Contents
 
@@ -80,6 +80,8 @@ remotes:
 A missing field fails at load, naming the remote and the field. Pushing exports a bundle, uploads it under its timestamped file name, then deletes the oldest bundles beyond `keep` (default 10; `0` keeps everything). A stored bundle is never overwritten: the name carries creation time to the millisecond. Listing and downloading only read; restoring a remote bundle reuses the previewed import path, so a bundle from another machine is inspected before it lands.
 
 Remotes added from the settings page live in the credential store under the `user-data-backup` scope, keyed by remote id, and `/api/user-data.remotes` reports where each one came from. Saving an existing id keeps the stored secret fields it leaves blank. `/api/user-data.remotes.test` lists a remote without writing anything, which is what the page's **Test** button reports.
+
+One remote request runs under a deadline: `remoteTimeoutMs` in the plugin config gives the milliseconds it may take before the transport is aborted (30000 when absent). A remote that outlives it answers 504, so a silent network fails the route instead of holding it open.
 
 An interval push repeats the same upload for every remote:
 

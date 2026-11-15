@@ -78,8 +78,12 @@ it('lists the configured remotes and their stored bundles', async () => {
 })
 
 it('pushes a selection to one remote', async () => {
-  const { calls, request } = jsonRecorder({ name: 'dsh-web-2.zip', pruned: ['dsh-web-1.zip'] })
-  await expect(pushBundle('dav', ['profile'], request)).resolves.toEqual({ name: 'dsh-web-2.zip', pruned: ['dsh-web-1.zip'] })
+  const { calls, request } = jsonRecorder({ name: 'dsh-web-2.zip', size: 512, pruned: ['dsh-web-1.zip'] })
+  await expect(pushBundle('dav', ['profile'], request)).resolves.toEqual({
+    name: 'dsh-web-2.zip',
+    size: 512,
+    pruned: ['dsh-web-1.zip'],
+  })
   expect(calls[0]).toEqual(['/api/user-data.sync.push?id=dav&components=profile', { method: 'POST' }])
 })
 
@@ -91,6 +95,46 @@ it('downloads one stored bundle', async () => {
   }
   await expect(fetchRemoteBundle('dav', 'dsh web.zip', request)).resolves.toEqual(new Uint8Array([7, 8]))
   expect(calls).toEqual(['/api/user-data.sync.bundle?id=dav&name=dsh%20web.zip'])
+})
+
+it('counts the bytes of a download as they arrive', async () => {
+  const seen: [number, number | undefined][] = []
+  const request: typeof fetch = async () =>
+    new Response(new Uint8Array([7, 8, 9]), { headers: { 'content-length': '3' } })
+  await expect(fetchRemoteBundle('dav', 'dsh-web-2.zip', request, (loaded, total) => {
+    seen.push([loaded, total])
+  })).resolves.toEqual(new Uint8Array([7, 8, 9]))
+  expect(seen.at(-1)).toEqual([3, 3])
+})
+
+it('counts a download the transport buffered whole', async () => {
+  const seen: [number, number | undefined][] = []
+  /* A body the runtime hands over buffered, not as a stream: the count still lands. */
+  const request = (async () => ({
+    ok: true,
+    headers: new Headers({ 'content-length': '3' }),
+    body: null,
+    arrayBuffer: async () => new Uint8Array([7, 8, 9]).buffer,
+  })) as unknown as typeof fetch
+  await expect(fetchRemoteBundle('dav', 'dsh-web-2.zip', request, (loaded, total) => {
+    seen.push([loaded, total])
+  })).resolves.toEqual(new Uint8Array([7, 8, 9]))
+  expect(seen).toEqual([[3, 3]])
+})
+
+it('counts a buffered download that declared no length', async () => {
+  const seen: [number, number | undefined][] = []
+  const request = (async () => ({
+    ok: true,
+    headers: new Headers(),
+    body: null,
+    arrayBuffer: async () => new Uint8Array([7, 8]).buffer,
+  })) as unknown as typeof fetch
+  await expect(fetchRemoteBundle('dav', 'dsh-web-2.zip', request, (loaded, total) => {
+    seen.push([loaded, total])
+  })).resolves.toEqual(new Uint8Array([7, 8]))
+  /* No declared length: the count falls back to the bytes that arrived. */
+  expect(seen).toEqual([[2, 2]])
 })
 
 it('reports refused remote reads', async () => {

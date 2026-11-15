@@ -233,10 +233,11 @@ it('pushes a bundle to the configured remote and prunes beyond its budget', asyn
     'http://127.0.0.1' + USER_DATA_SYNC_PUSH_PATH + '?id=dav&components=profile',
     { method: 'POST' },
   ))
-  const receipt = await pushed.json() as { name: string; pruned: string[] }
+  const receipt = await pushed.json() as { name: string; size: number; pruned: string[] }
   expect(receipt.name).toMatch(/^dsh-web-.*\.zip$/)
   expect(receipt.pruned).toEqual(['dsh-web-2026-11-12T00-00-00.000Z.zip'])
   expect([...stored.keys()]).toEqual([receipt.name])
+  expect(receipt.size).toBe(stored.get(receipt.name)!.byteLength)
 
   const listed = await route(harness, USER_DATA_SYNC_LIST_PATH).fetch(new Request(
     'http://127.0.0.1' + USER_DATA_SYNC_LIST_PATH + '?id=dav',
@@ -247,8 +248,42 @@ it('pushes a bundle to the configured remote and prunes beyond its budget', asyn
     'http://127.0.0.1' + USER_DATA_SYNC_BUNDLE_PATH + '?id=dav&name=' + receipt.name,
   ))
   expect(downloaded.headers.get('content-type')).toBe('application/zip')
-  const bundle = readBundle(new Uint8Array(await downloaded.arrayBuffer()))
+  const bytes = new Uint8Array(await downloaded.arrayBuffer())
+  expect(downloaded.headers.get('content-length')).toBe(String(bytes.byteLength))
+  const bundle = readBundle(bytes)
   expect(Object.keys(bundle.manifest.components)).toEqual(['profile'])
+  vi.unstubAllGlobals()
+})
+
+it('answers 504 when a remote outlives the configured deadline', async () => {
+  let aborted = false
+  vi.stubGlobal('fetch', async (_input: string, init?: RequestInit) => await new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => {
+      aborted = true
+      reject(init.signal?.reason)
+    })
+  }))
+  const harness = await mount({
+    remotes: { dav: { kind: 'webdav', url: 'https://dav.example.com/dsh' } },
+    remoteTimeoutMs: 5,
+  })
+  const response = await route(harness, USER_DATA_SYNC_LIST_PATH).fetch(new Request(
+    'http://127.0.0.1' + USER_DATA_SYNC_LIST_PATH + '?id=dav',
+  ))
+  expect(response.status).toBe(504)
+  expect(aborted).toBe(true)
+  vi.unstubAllGlobals()
+})
+
+it('re-raises a remote failure that is not a timeout', async () => {
+  vi.stubGlobal('fetch', async () => { throw new Error('boom') })
+  const harness = await mount({
+    remotes: { dav: { kind: 'webdav', url: 'https://dav.example.com/dsh' } },
+    remoteTimeoutMs: 50,
+  })
+  await expect(route(harness, USER_DATA_SYNC_LIST_PATH).fetch(new Request(
+    'http://127.0.0.1' + USER_DATA_SYNC_LIST_PATH + '?id=dav',
+  ))).rejects.toThrow('boom')
   vi.unstubAllGlobals()
 })
 
@@ -533,19 +568,20 @@ it('pushes to every remote when asked and arms the configured interval', async (
 })
 
 it('keeps the interval running after a push it could not complete', async () => {
-  vi.stubGlobal('fetch', async () => {
-    throw new Error('offline')
-  })
   vi.useFakeTimers()
   try {
     await mount({
       remotes: { dav: { kind: 'webdav', url: 'https://dav.example.com/dsh' } },
-      schedule: { everyMinutes: 1 },
+      schedule: { everyMinutes: 1, components: ['sessions'] },
     })
     await vi.advanceTimersByTimeAsync(60_000)
     expect(vi.getTimerCount()).toBe(1)
   } finally {
     vi.useRealTimers()
-    vi.unstubAllGlobals()
   }
+})
+
+it('schedules nothing to upload when the schedule names no remote', async () => {
+  const harness = await mount({ schedule: { everyMinutes: 1 } })
+  await (harness.context.get('userDataBackup') as UserDataBackup).syncNow()
 })

@@ -1,163 +1,553 @@
+/* Cards follow the settings-card material; nested panels (plan, editor, remote)
+   drop one radius tier onto the module tint, so a surface inside a surface
+   stays readable without new fills. */
+
 .section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
+  max-width: 640px;
   padding: 0 0 24px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
 .title {
-  font-size: 16px;
-  line-height: 24px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
   font-weight: 600;
 }
 
-.description,
+.description {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.cardIntro {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
 .hint {
-  margin-top: 4px;
-  color: var(--dsw-alias-label-secondary);
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+/* The push acts on the export selection, so the card names that selection in place. */
+.scope {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.group {
+.cardActions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 16px 0 0;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
-.heading {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
+/* The download note belongs under the control that starts it, not below the card body. */
+.actionColumn {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.actionNote {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: right;
+}
+
+/* Two controls that act on the same surface, kept on one line under a note. */
+.buttonRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .checks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.check {
+  padding: 9px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.check:has(input:checked) {
+  border-color: var(--dsw-alias-border-l4);
+}
+
+@media (hover: hover) {
+  .check:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+@media (max-width: 480px) {
+  .checks {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .picker {
   display: none;
 }
 
-.plan {
+/* Nested panel shared by the import plan, the add-remote form and a remote row. */
+.surface,
+.applied,
+.editor {
+  padding: 14px 16px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.surface {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 12px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-l2);
+  gap: 10px;
+}
+
+.surfaceHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.surfaceTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.surfaceOrigin {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.surfaceTotals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: -4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.surfaceTotals > span + span::before {
+  content: '·';
+  margin-right: 8px;
 }
 
 .planList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 12px;
-  line-height: 18px;
 }
 
-.planList li {
+.planList > li {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .planComponent {
-  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.planDetail {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
+}
+
+.surfaceFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.applied {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.appliedTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.appliedDetail {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.appliedDetail code {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.noteRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.failure {
+  margin: 0;
+  color: var(--dsw-alias-label-danger);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.stale {
+  margin: 0;
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+/* The form reports its own failure across the full width, above the controls that caused it. */
+.editor > .failure {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The label keeps its own text so the control's accessible name stays the field name alone. */
+.fieldControl {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldNote {
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* A collection URL outgrows a half column; pairing the rest keeps the rows even. */
+.wide {
+  grid-column: 1 / -1;
+}
+
+.fieldLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.select {
+  appearance: none;
+  height: 32px;
+  padding: 0 32px 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background-color: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  /* Data-URI SVGs cannot resolve CSS variables; #81858C is the caption gray
+     shared by both themes. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+}
+
+.editorFoot {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
 }
 
 .remote {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 12px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-l2);
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
 }
 
 .remoteHead {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.remoteIdentity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: baseline;
   gap: 8px;
 }
 
 .remoteId {
-  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.remoteMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.dangerAction:not(:disabled) {
+  color: var(--dsw-alias-label-danger);
+}
+
+.probeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.confirmScope {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.remote li {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.actions {
+.probeOk,
+.probeBad {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
 }
 
-.form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  width: 100%;
-  padding: 12px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-l2);
+.probeOk {
+  color: var(--dsw-alias-label-secondary);
 }
 
-.field {
+.probeBad {
+  color: var(--dsw-alias-label-danger);
+}
+
+/* The dot carries the outcome without changing the status text. */
+.probeOk::before,
+.probeBad::before {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+  content: '';
+}
+
+.probeOk::before {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.probeBad::before {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+/* The clock says when the listed entries were read, so an old count is not mistaken for the present. */
+.probeWhen {
+  flex: none;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.remoteEmpty {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.entries {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  list-style: none;
+}
+
+.entries > li {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
 }
 
-.fieldLabel {
+.entries > li + li {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.entryName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entrySize {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.emptyBox {
+  margin: 0;
+  padding: 22px 16px;
+  border: 0.5px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.emptyState p {
+  margin: 0;
+}
+
+.importEmpty {
+  padding: 16px;
+  text-align: left;
+}
+
+.receipt {
+  margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 19px;
+  overflow-wrap: anywhere;
 }
 
-.select {
-  height: 28px;
-  padding: 0 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-l1);
-  color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-}
-
-.ok {
+.progress {
+  margin: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.applied {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.failure {
-  color: var(--dsw-alias-label-danger);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
 }

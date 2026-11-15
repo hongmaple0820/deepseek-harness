@@ -132,7 +132,12 @@ export interface Config {
   readonly remotes?: Record<string, RemoteSettings>
   /** Recurring push, so a machine keeps a remote copy without anyone pressing a button. */
   readonly schedule?: ScheduleConfig
+  /** Milliseconds one remote request may take before it is aborted; 30 s when absent. */
+  readonly remoteTimeoutMs?: number
 }
+
+/** Deadline for one remote request when configuration names none. */
+const DEFAULT_REMOTE_TIMEOUT_MS = 30_000
 
 /** Validate backup policy. */
 export const Config: Schema<Config> = Schema.object({
@@ -154,6 +159,7 @@ export const Config: Schema<Config> = Schema.object({
     everyMinutes: Schema.number(),
     components: Schema.array(Schema.union(BACKUP_COMPONENTS)),
   }),
+  remoteTimeoutMs: Schema.number(),
 })
 
 const TIMESTAMP_ENCODER = (date: Date): string => date.toISOString()
@@ -165,12 +171,17 @@ interface ConfiguredRemote {
   readonly keep: number
 }
 
+/** Deadline one remote request runs under, so a silent transport fails instead of hanging a route. */
+function withDeadline(timeoutMs: number): typeof fetch {
+  return (input, init) => globalThis.fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+}
+
 function needed(value: string | undefined, remote: string, field: string): string {
   if (value === undefined || value === '') throw new Error('remote ' + remote + ' needs ' + field)
   return value
 }
 
-function remoteOf(id: string, settings: RemoteSettings): ConfiguredRemote {
+function remoteOf(id: string, settings: RemoteSettings, request: typeof fetch): ConfiguredRemote {
   const prefix = settings.prefix === undefined || settings.prefix === '' ? {} : { prefix: settings.prefix }
   const keep = settings.keep ?? DEFAULT_KEEP
   if (settings.kind === 'webdav') {
@@ -184,7 +195,7 @@ function remoteOf(id: string, settings: RemoteSettings): ConfiguredRemote {
         ...settings.username === undefined ? {} : { username: settings.username },
         ...settings.password === undefined ? {} : { password: settings.password },
         ...prefix,
-      }),
+      }, request),
     }
   }
   return {
@@ -199,7 +210,7 @@ function remoteOf(id: string, settings: RemoteSettings): ConfiguredRemote {
       accessKeyId: needed(settings.accessKeyId, id, 'accessKeyId'),
       secretAccessKey: needed(settings.secretAccessKey, id, 'secretAccessKey'),
       ...prefix,
-    }),
+    }, request),
   }
 }
 
@@ -254,6 +265,8 @@ export default class UserDataBackup extends Service {
 
   private readonly dshVersion: string | undefined
 
+  private readonly request: typeof fetch
+
   private readonly configuredRemotes: ReadonlyMap<string, ConfiguredRemote>
 
   private readonly schedule: ScheduleConfig
@@ -262,7 +275,8 @@ export default class UserDataBackup extends Service {
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'userDataBackup')
     this.dshVersion = config.dshVersion
-    this.configuredRemotes = new Map(Object.entries(config.remotes ?? {}).map(([id, settings]) => [id, remoteOf(id, settings)]))
+    this.request = withDeadline(config.remoteTimeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS)
+    this.configuredRemotes = new Map(Object.entries(config.remotes ?? {}).map(([id, settings]) => [id, remoteOf(id, settings, this.request)]))
     this.schedule = config.schedule ?? {}
     ctx.effect(() => {
       const connection = ctx.get('connection') as ConnectionLike | undefined
@@ -315,19 +329,19 @@ export default class UserDataBackup extends Service {
           path: USER_DATA_SYNC_PUSH_PATH,
           methods: ['POST'],
           requestBody: 'buffered',
-          fetch: request => this.pushResponse(request),
+          fetch: request => this.timed(() => this.pushResponse(request)),
         }),
         connection.fetch.register({
           path: USER_DATA_SYNC_LIST_PATH,
           methods: ['GET', 'HEAD'],
           requestBody: 'buffered',
-          fetch: request => this.listResponse(request),
+          fetch: request => this.timed(() => this.listResponse(request)),
         }),
         connection.fetch.register({
           path: USER_DATA_SYNC_BUNDLE_PATH,
           methods: ['GET', 'HEAD'],
           requestBody: 'buffered',
-          fetch: request => this.bundleResponse(request),
+          fetch: request => this.timed(() => this.bundleResponse(request)),
         }),
       ]
       return () => {
@@ -451,7 +465,7 @@ export default class UserDataBackup extends Service {
       [...this.configuredRemotes].map(([id, remote]) => ({ id, remote, source: 'config' }))
     for (const [id, settings] of await readStoredRemotes(this.credentials)) {
       if (this.configuredRemotes.has(id)) throw new Error('remote ' + id + ' is configured both in configuration and on this machine')
-      entries.push({ id, remote: remoteOf(id, settings), source: 'stored' })
+      entries.push({ id, remote: remoteOf(id, settings, this.request), source: 'stored' })
     }
     return entries
   }
@@ -509,6 +523,20 @@ export default class UserDataBackup extends Service {
     }
   }
 
+  /**
+   * A remote route reports a transport that hit the deadline as a gateway timeout.
+   * @param run Route work whose remote calls are bounded by {@link Config.remoteTimeoutMs}.
+   * @returns The route response, or the timeout the client names in its own words.
+   */
+  private async timed(run: () => Promise<Response>): Promise<Response> {
+    try {
+      return await run()
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') return json({ error: 'the remote did not answer in time' }, 504)
+      throw error
+    }
+  }
+
   private async resolveRemote(id: string | null): Promise<ConfiguredRemote> {
     if (id === null || id === '') throw new Error('a remote id is required')
     const remote = (await this.remotes()).get(id)
@@ -563,7 +591,11 @@ export default class UserDataBackup extends Service {
     const selection = { components: parseComponents(new URL(request.url).searchParams.get('components')) }
     const exported = await this.exportBundle(selection)
     await remote.target.put(exported.fileName, exported.bytes)
-    return json({ name: exported.fileName, pruned: await pruneRemote(remote.target, remote.keep) })
+    return json({
+      name: exported.fileName,
+      size: exported.bytes.byteLength,
+      pruned: await pruneRemote(remote.target, remote.keep),
+    })
   }
 
   private async listResponse(request: Request): Promise<Response> {
@@ -577,6 +609,7 @@ export default class UserDataBackup extends Service {
     return new Response(new Blob([new Uint8Array(bytes)]), {
       headers: {
         'content-type': 'application/zip',
+        'content-length': String(bytes.byteLength),
         'content-disposition': 'attachment; filename="' + name.replace(/"/g, '') + '"',
       },
     })

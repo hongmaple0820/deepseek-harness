@@ -84,6 +84,8 @@ export interface RemoteListing extends RemoteInfo {
 /** Outcome of one push. */
 export interface PushReceipt {
   readonly name: string
+  /** Bytes the pushed bundle carries, as the Host that uploaded it measured them. */
+  readonly size: number
   readonly pruned: readonly string[]
 }
 
@@ -218,24 +220,61 @@ export async function pushBundle(
  * @param id - remote id.
  * @param name - stored bundle name.
  * @param request - fetch implementation.
+ * @param onProgress - byte counter called as the body arrives, with the total when the transport declared one.
  * @returns the bundle ZIP.
  */
 export async function fetchRemoteBundle(
   id: string,
   name: string,
   request: typeof fetch = fetch,
+  onProgress?: (loaded: number, total: number | undefined) => void,
 ): Promise<Uint8Array> {
   const response = await request(SYNC_BUNDLE_PATH + '?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(name))
-  if (!response.ok) throw new Error(`user-data-backup answered ${response.status}`)
-  return new Uint8Array(await response.arrayBuffer())
+  if (!response.ok) throw refusal(response)
+  const declared = Number(response.headers.get('content-length'))
+  const total = declared > 0 ? declared : undefined
+  const body = response.body
+  if (body === null) {
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    onProgress?.(bytes.byteLength, total ?? bytes.byteLength)
+    return bytes
+  }
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let loaded = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done === true || value === undefined) break
+    chunks.push(value)
+    loaded += value.byteLength
+    onProgress?.(loaded, total)
+  }
+  const bytes = new Uint8Array(loaded)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+/** A remote the Host gave up on at its configured deadline, reported as a gateway timeout. */
+export class RemoteTimeoutError extends Error {
+  constructor() {
+    super('the remote did not answer in time')
+  }
+}
+
+function refusal(response: Response): Error {
+  return response.status === 504 ? new RemoteTimeoutError() : new Error(`user-data-backup answered ${response.status}`)
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  if (!response.ok) throw new Error(`user-data-backup answered ${response.status}`)
+  if (!response.ok) throw refusal(response)
   return await response.json() as T
 }
 
 async function readPlan(response: Response): Promise<RestorePlan> {
-  if (!response.ok) throw new Error(`user-data-backup answered ${response.status}`)
+  if (!response.ok) throw refusal(response)
   return await response.json() as RestorePlan
 }
