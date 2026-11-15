@@ -35,7 +35,7 @@ One client toggle — background session notifications, on by default — read b
 
 ### Relationship to existing notes
 
-[Session reading state](../../implemented/feature/2026-10-23-session-reading-memory.md) owns the unread records and their acknowledgement; this proposal consumes its stream and supersedes none of it. Its deferred visibility refinement — distinguishing settings or auxiliary panels from the main view — stays deferred: the watcher uses the same whole-page visibility signal. [Close-to-background](../../implemented/architecture/2026-09-23-desktop-close-to-background-and-quit-confirmation.md) keeps its rule that closing the window itself sends no notification; this proposal notifies on session transitions, not on window events.
+[Session reading state](../../implemented/feature/2026-10-23-session-reading-memory.md) owns the unread records and their acknowledgement; this proposal consumes its stream and supersedes none of it. Its deferred visibility refinement — distinguishing settings or auxiliary panels from the main view — stays deferred: the watcher uses the same whole-page visibility signal. [Close-to-background](../../implemented/architecture/2026-09-23-desktop-close-to-background-and-quit-confirmation.md) keeps its rule that closing the window itself sends no notification; this proposal notifies on session transitions, not on window events. The watcher this note defines is proposed as the shared core of the [session attention system](2026-11-15-session-attention-system.md), which adds the in-app attention stack and the taskbar/tray surfaces; this note keeps the OS-notification surface and its presence condition.
 
 ## Alternatives considered
 

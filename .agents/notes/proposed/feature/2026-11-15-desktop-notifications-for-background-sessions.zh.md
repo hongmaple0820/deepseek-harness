@@ -35,7 +35,7 @@ Status: proposed
 
 ### 与既有笔记的关系
 
-[Session reading state](../../implemented/feature/2026-10-23-session-reading-memory.zh.md) 拥有未读记录及其确认；本提案只消费它的流，不取代其中任何部分。它推迟的可见性细化——区分设置或辅助面板与主视图——继续推迟：监视器使用同一条整页可见性信号。[Close-to-background](../../implemented/architecture/2026-09-23-desktop-close-to-background-and-quit-confirmation.zh.md) 的规则不变：关闭窗口本身不发通知；本提案通知的是会话转换，不是窗口事件。
+[Session reading state](../../implemented/feature/2026-10-23-session-reading-memory.zh.md) 拥有未读记录及其确认；本提案只消费它的流，不取代其中任何部分。它推迟的可见性细化——区分设置或辅助面板与主视图——继续推迟：监视器使用同一条整页可见性信号。[Close-to-background](../../implemented/architecture/2026-09-23-desktop-close-to-background-and-quit-confirmation.zh.md) 的规则不变：关闭窗口本身不发通知；本提案通知的是会话转换，不是窗口事件。本笔记定义的监视器被提案升格为 [session attention system](2026-11-15-session-attention-system.zh.md) 的共享核心——后者增加应用内注意力栈与任务栏/托盘展示面；本笔记保留系统通知面及其在场条件。
 
 ## Alternatives considered
 
