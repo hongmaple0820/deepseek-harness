@@ -5,8 +5,10 @@ import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 // Type-only service merge for ctx.slots.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { installReading } from './read.ts'
+import { SessionAttentionWatcher } from './attention.ts'
 import { UiSessionStatus } from './status.ts'
 
+export type { AttentionEvent, AttentionEventKind, SessionAttentionWatcher } from './attention.ts'
 export type { SessionStatus, SessionStatusSnapshot, UiSessionStatus, UseSessionStatus } from './status.ts'
 
 /** Required Controller, Remote, generated reading namespace, access, renderer, and Session UI services. */
@@ -21,4 +23,5 @@ export function apply(ctx: Context): void {
   const status = new UiSessionStatus(ctx, ctx.sessions, ctx.uiSession.pendingInteractions)
   ctx.slots.provideRoot({ hooks: { sessionStatus: status } })
   installReading(ctx, status)
+  new SessionAttentionWatcher(ctx, status, ctx.uiSession.pendingInteractions)
 }
