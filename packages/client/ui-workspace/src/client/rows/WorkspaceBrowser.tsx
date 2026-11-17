@@ -1030,9 +1030,10 @@ export function WorkspaceBrowser({
   const flatMemberIds = useMemo(() => sessionMemberIds(list), [list])
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
     const memberIds = workspace.sessionIds
-    const baseOrder = orderBy === 'updated'
+    const saved = sessionOrderByAccount[workspace.workspaceId]
+    const baseOrder = saved === undefined
       ? orderByRecency(memberIds, list.byId)
-      : reconcileManualOrder(memberIds, sessionOrderByAccount[workspace.workspaceId], list.byId, orderState)
+      : reconcileManualOrder(memberIds, saved, list.byId, orderState)
     return {
       ...workspace,
       sessionIds: pinCurrentBlank(
@@ -1040,25 +1041,27 @@ export function WorkspaceBrowser({
         currentBlank !== undefined && memberIds.includes(currentBlank) ? currentBlank : undefined,
       ),
     }
-  }), [currentBlank, list.byId, orderBy, orderState, sessionOrderByAccount, workspaces])
+  }), [currentBlank, list.byId, orderState, sessionOrderByAccount, workspaces])
   const orderedUngroupedSessionIds = useMemo(() => {
-    const baseOrder = orderBy === 'updated'
+    const saved = sessionOrderByAccount[UNGROUPED_KEY]
+    const baseOrder = saved === undefined
       ? orderByRecency(ungroupedMemberIds, list.byId)
-      : reconcileManualOrder(ungroupedMemberIds, sessionOrderByAccount[UNGROUPED_KEY], list.byId, orderState)
+      : reconcileManualOrder(ungroupedMemberIds, saved, list.byId, orderState)
     return pinCurrentBlank(
       baseOrder,
       currentBlank !== undefined && ungroupedMemberIds.includes(currentBlank) ? currentBlank : undefined,
     )
-  }, [currentBlank, list.byId, orderBy, orderState, sessionOrderByAccount, ungroupedMemberIds])
+  }, [currentBlank, list.byId, orderState, sessionOrderByAccount, ungroupedMemberIds])
   const orderedFlatSessionIds = useMemo(() => {
-    const baseOrder = orderBy === 'updated'
+    const saved = sessionOrderByAccount[FLAT_SESSION_ORDER_KEY]
+    const baseOrder = saved === undefined
       ? orderByRecency(flatMemberIds, list.byId)
-      : reconcileManualOrder(flatMemberIds, sessionOrderByAccount[FLAT_SESSION_ORDER_KEY], list.byId, orderState)
+      : reconcileManualOrder(flatMemberIds, saved, list.byId, orderState)
     return pinCurrentBlank(
       baseOrder,
       currentBlank !== undefined && flatMemberIds.includes(currentBlank) ? currentBlank : undefined,
     )
-  }, [currentBlank, flatMemberIds, list.byId, orderBy, orderState, sessionOrderByAccount])
+  }, [currentBlank, flatMemberIds, list.byId, orderState, sessionOrderByAccount])
   const activeSessionOrders = useMemo<Readonly<Record<string, readonly SessionId[]>>>(() => Object.fromEntries([
     ...orderedWorkspaces.map(workspace => [workspace.workspaceId, workspace.sessionIds] as const),
     [UNGROUPED_KEY, orderedUngroupedSessionIds] as const,
@@ -1073,11 +1076,13 @@ export function WorkspaceBrowser({
     ])
   }, [actions.retainAccountKeys, workspacePhase, workspaces])
   useEffect(() => {
-    if (list.phase !== 'ready' || workspaceReady || orderBy !== 'manual' || currentBlank === undefined) return
+    if (list.phase !== 'ready' || workspaceReady || currentBlank === undefined) return
     // A first prompt can end blank pinning before the Workspace baseline arrives.
     // Preserve saved members until that baseline can establish departures.
     const changed: Record<string, readonly string[]> = {}
     for (const [key, ids] of Object.entries(activeSessionOrders)) {
+      // Manual keeps every group ordered; last-updated tracks only the groups a drag froze.
+      if (orderBy !== 'manual' && sessionOrderByAccount[key] === undefined) continue
       if (key !== FLAT_SESSION_ORDER_KEY && workspacePhase !== 'ready') continue
       const saved = sessionOrderByAccount[key] ?? []
       if (ids[0] !== currentBlank || saved[0] === currentBlank) continue
@@ -1095,9 +1100,10 @@ export function WorkspaceBrowser({
     workspaceReady,
   ])
   useEffect(() => {
-    if (list.phase !== 'ready' || !workspaceReady || orderBy !== 'manual' || currentBlank === undefined) return
+    if (list.phase !== 'ready' || !workspaceReady || currentBlank === undefined) return
     const moved = Object.entries(activeSessionOrders).some(([key, ids]) =>
-      ids[0] === currentBlank && sessionOrderByAccount[key]?.[0] !== currentBlank)
+      (orderBy === 'manual' || sessionOrderByAccount[key] !== undefined)
+      && ids[0] === currentBlank && sessionOrderByAccount[key]?.[0] !== currentBlank)
     if (moved) actions.syncSessionOrders(activeSessionOrders)
   }, [
     actions.syncSessionOrders,

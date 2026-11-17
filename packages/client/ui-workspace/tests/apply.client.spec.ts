@@ -30,7 +30,6 @@ import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx
 import type { ArchiveToastInjected, ToastDisplayInjected } from '../src/client/contract/toast.ts'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
-import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 import { provideSessionStatus } from './session-status.client.ts'
 
@@ -510,9 +509,9 @@ describe('ui-workspace apply', () => {
     pin.pinSession(sid('three'))
     expect(b.pinSession).toHaveBeenCalledWith('three')
     await vi.waitFor(() => {
+      // The pin freezes the accounts the Session belongs to; the rest of the sidebar keeps following recency.
       expect(view.getSnapshot().sessionOrderByAccount).toEqual({
         alpha: ['three', 'one', 'two'],
-        [UNGROUPED_KEY]: [],
         [FLAT_SESSION_ORDER_KEY]: ['three', 'one', 'two'],
       })
     })

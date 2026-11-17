@@ -206,16 +206,14 @@ describe('WorkspaceBrowser', () => {
     expect(bindScrollerRef).toHaveBeenLastCalledWith(null)
   })
 
-  it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
+  it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency until a drag freezes that account', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()
     preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
-    const account = mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha'
-    preferences.actions.setSessionOrder(account, ['older', 'newer'], {})
-    preferences.actions.setSessionOrder(UNGROUPED_KEY, ['older', 'newer'], {})
-    preferences.actions.setSessionOrder(FLAT_SESSION_ORDER_KEY, ['older', 'newer'], {})
+    const account = mode === 'flat' ? FLAT_SESSION_ORDER_KEY : mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha'
+    // A saved order belongs to its own group; every other group keeps following last-updated.
+    preferences.actions.setSessionOrder('beta', ['older', 'newer'], {})
     preferences.actions.setGroupExpanded(account, true)
-    preferences.actions.setGroupExpanded(UNGROUPED_KEY, true)
     localStorage.setItem('dsh.workspace.view.v5', JSON.stringify({ ...preferences.getSnapshot(), orderBy: 'updated' }))
     const b = mount({
       useSessions: hook(sessionState([summary('newer', 100)])),
@@ -233,15 +231,25 @@ describe('WorkspaceBrowser', () => {
     expect(names()).toEqual(['older', 'newer'])
     rerender(b, { useSessions: hook(sessionState([summary('older', 80), summary('newer', 100)])) })
     expect(names()).toEqual(['newer', 'older'])
-    expect(b.store.getSnapshot().sessionOrderByAccount[account]).toEqual(['older', 'newer'])
+    expect(b.store.getSnapshot().sessionOrderByAccount[account]).toBeUndefined()
+
+    // A drag freezes this account alone; reselecting last-updated releases it again.
+    act(() => { b.store.actions.setSessionOrder(account, ['older', 'newer'], {}) })
+    expect(names()).toEqual(['older', 'newer'])
+    rerender(b, { useSessions: hook(sessionState([summary('older', 20), summary('newer', 100)])) })
+    expect(names()).toEqual(['older', 'newer'])
+    act(() => { b.store.actions.setOrderBy('updated', {}) })
+    expect(names()).toEqual(['newer', 'older'])
+    // Reselecting last-updated releases every frozen group, not just the one that was dragged.
+    expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({})
     b.view.unmount()
     const restored = mount({
       useSessions: hook(sessionState([summary('older', 80), summary('newer', 100)])),
       useWorkspaces: b.props.useWorkspaces,
     })
     expect(names()).toEqual(['newer', 'older'])
-    act(() => { restored.store.actions.setOrderBy('manual', {}) })
-    expect(names()).toEqual(['newer', 'older'])
+    // Reselecting last-updated cleared every frozen group, so the remount starts from pure recency.
+    expect(restored.store.getSnapshot().sessionOrderByAccount).toEqual({})
   })
 
   it.each(['workspace', 'flat', 'ungrouped'] as const)('starts Manual from the current %s order and forgets discarded layouts', (mode) => {
@@ -1156,7 +1164,7 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().orderBy).toBe('updated')
     fireEvent.dragStart(one, { dataTransfer: dragData() })
     fireDrag(two, 'drop', 180)
-    expect(b.store.getSnapshot().orderBy).toBe('manual')
+    expect(b.store.getSnapshot().orderBy).toBe('updated')
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
