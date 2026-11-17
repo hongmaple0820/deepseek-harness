@@ -8,6 +8,7 @@ import {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {
+  SessionStatus,
   SessionStatusSnapshot,
 } from '@deepseek-ai/dsh-client-ui-session-status/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -118,6 +119,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Row-state filter; omitted reads as `all`. */
+  statusFilter?: SessionStatusFilter
 }
 
 interface Group {
@@ -224,6 +227,33 @@ export function pinCurrentBlank(
  * search) to archived rows.
  */
 export type ArchivedFilter = 'default' | 'show' | 'only'
+
+/**
+ * Row-state filter over the same facts the row indicators show: `waiting` keeps
+ * Sessions with an unanswered approval, question, or plan review; `unread`
+ * keeps natural completions the reader has not acknowledged; `failed` keeps
+ * failed completions.
+ */
+export type SessionStatusFilter = 'all' | 'running' | 'waiting' | 'unread' | 'failed'
+
+/**
+ * Decide whether one Session survives the status filter.
+ * @param status - unified UI status of the Session, or undefined when unread.
+ * @param filter - selected status filter.
+ * @returns whether the row belongs to the filtered view.
+ */
+export function matchesStatusFilter(
+  status: SessionStatus | undefined,
+  filter: SessionStatusFilter,
+): boolean {
+  switch (filter) {
+    case 'all': return true
+    case 'running': return status?.running === true
+    case 'waiting': return status?.pendingInteraction !== undefined
+    case 'unread': return status?.completionUnread === true
+    case 'failed': return status?.completionFailed === true
+  }
+}
 
 /**
  * Ordinary sessions are visible; among blank sessions, only the current one
@@ -446,19 +476,25 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, current)
   const groups: GroupNode[] = []
+  const statusFilter = view.statusFilter ?? 'all'
   for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
+    const members = statusFilter === 'all'
+      ? g.sessions
+      : g.sessions.filter(session => matchesStatusFilter(statuses.get(session.id), statusFilter))
+    // A filter that empties the group hides it instead of leaving a bare header.
+    if (statusFilter !== 'all' && members.length === 0) continue
     groups.push({
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
       createdAt: g.createdAt,
       label: g.label,
-      sessionCount: g.sessions.length,
+      sessionCount: members.length,
       expanded,
       containsCurrent: g.key === currentGroup,
       sessions: expanded
-        ? sectionMembers(g.sessions, pinned, archived)
+        ? sectionMembers(members, pinned, archived)
           .map(session => sessionNode(session, list, statuses, pinned, archived))
         : [],
     })
@@ -502,6 +538,7 @@ export function visibleSessionIds(
  * @param sessionIds - complete account members in the selected order, including hidden archives.
  * @param rowState - registry-global pin and archive sets plus the archived filter.
  * @param statuses - unified UI status by Session.
+ * @param statusFilter - row-state filter; omitted reads as `all`.
  * @returns flat rows in sectioned order with current status indicators.
  */
 export function deriveFlat(
@@ -509,6 +546,7 @@ export function deriveFlat(
   sessionIds: readonly SessionId[],
   rowState: SessionRowState,
   statuses: SessionStatuses,
+  statusFilter: SessionStatusFilter = 'all',
 ): SessionNode[] {
   const archived = new Set(rowState.archivedSessionIds)
   const pinned = new Set(rowState.pinnedSessionIds)
@@ -516,6 +554,7 @@ export function deriveFlat(
   const members = sessionIds.flatMap((id) => {
     const session = list.byId[id]
     return session !== undefined && sessionVisible(session, current, archived, rowState.archivedFilter)
+      && matchesStatusFilter(statuses.get(id), statusFilter)
       ? [session]
       : []
   })

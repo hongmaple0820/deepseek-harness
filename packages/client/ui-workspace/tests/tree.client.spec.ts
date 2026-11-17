@@ -11,7 +11,8 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, sessionSearchIndex, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  matchesStatusFilter, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel,
+  UNGROUPED_KEY, type SessionStatusFilter,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -590,6 +591,62 @@ describe('deriveGroups', () => {
       withMain(list(owned, loose), loose.id), [ws], noRows, noAttention, view(),
     )
     expect(looseGroups.find(group => group.key === UNGROUPED_KEY)!.containsCurrent).toBe(true)
+  })
+})
+
+describe('status filter', () => {
+  const filtered = (filter: SessionStatusFilter) => ({
+    expandedGroups: ['project'],
+    statusFilter: filter,
+  })
+  const sessions = list(summary('run', 4), summary('wait', 3), summary('done', 2), summary('bad', 1), summary('idle', 0))
+  const workspaces = [workspace('project', ['run', 'wait', 'done', 'bad', 'idle'])]
+  const facts: SessionStatusSnapshot = new Map([
+    [sid('run'), status(undefined, { running: true })],
+    [sid('wait'), status({ kind: 'approval', key: 'approval:1', sessionId: sid('wait') } as SessionPendingInteraction)],
+    [sid('done'), status(undefined, { completionUnread: true })],
+    [sid('bad'), status(undefined, { completionUnread: true, completionFailed: true })],
+  ])
+  const ids = (filter: SessionStatusFilter) => deriveGroups(sessions, workspaces, noRows, facts, filtered(filter))[0]!
+    .sessions.map(node => node.id)
+
+  it('reads each row indicator as a filter', () => {
+    expect(matchesStatusFilter(undefined, 'all')).toBe(true)
+    expect(matchesStatusFilter(undefined, 'running')).toBe(false)
+    expect(matchesStatusFilter(status(undefined, { running: true }), 'running')).toBe(true)
+    expect(matchesStatusFilter(status(undefined, { pendingInteraction: undefined }), 'waiting')).toBe(false)
+    expect(matchesStatusFilter(status(undefined, { completionUnread: true }), 'unread')).toBe(true)
+    expect(matchesStatusFilter(status(undefined, { completionFailed: true }), 'failed')).toBe(true)
+  })
+
+  it('keeps matching rows in sectioned order', () => {
+    expect(ids('all')).toHaveLength(5)
+    expect(ids('running')).toEqual([sid('run')])
+    expect(ids('waiting')).toEqual([sid('wait')])
+    expect(ids('unread')).toEqual([sid('done'), sid('bad')])
+    expect(ids('failed')).toEqual([sid('bad')])
+  })
+
+  it('counts filtered members and hides groups the filter empties', () => {
+    const quiet = list(summary('idle', 1))
+    const empty = deriveGroups(
+      quiet, [workspace('project', ['idle'])], noRows, facts, filtered('failed'),
+    )
+    expect(empty).toEqual([])
+    const counted = deriveGroups(sessions, workspaces, noRows, facts, filtered('unread'))
+    expect(counted.map(group => [group.key, group.sessionCount])).toEqual([['project', 2]])
+  })
+
+  it('applies the same filter to the flat list', () => {
+    expect(deriveFlat(sessions, sessions.ids, noRows, facts, 'waiting').map(node => node.id)).toEqual([sid('wait')])
+  })
+
+  it('matches a Workspace title so a project name finds its sessions', () => {
+    const search = searchResults(
+      sessions, [workspace('gatenet', ['run', 'wait'])], 'gatenet', noArchive, 'default',
+      noAttention, { items: [], hasMore: false }, 10,
+    )
+    expect(search.items.map(item => item.id).sort()).toEqual([sid('run'), sid('wait')])
   })
 })
 
