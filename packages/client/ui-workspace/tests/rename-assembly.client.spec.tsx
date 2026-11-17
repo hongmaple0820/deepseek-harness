@@ -25,6 +25,7 @@ import { RemoteError, SlotTestRuntime, usePinnedBrowserLanguages } from '@deepse
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 
 // The service reads its initial locale from the browser; these specs assert
@@ -46,6 +47,8 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   // for ui-workspace's inject to settle.
   const directoryPicker = {}
   runtime.remote.provideNamespaces({ directoryPicker })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(runtime.ctx, runtime.remote)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

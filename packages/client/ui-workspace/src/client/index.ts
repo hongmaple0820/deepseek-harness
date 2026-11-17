@@ -42,6 +42,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 // Type-only: pulls the useSessionStatus root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session-status/client'
+// Type-only: pulls the ConfigForms service merge (ctx.configForms).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   type ArchiveSessionInjected, type DirectoryFlowSlotName, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
@@ -60,6 +62,9 @@ import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker, WorkspacePickerFactory } from './WorkspacePicker.tsx'
+import { installDesktopAttention, readDesktopNotifications } from './desktop-attention.ts'
+import { NotificationsRow, type NotificationsRowInjected } from './NotificationsRow.tsx'
+import { WORKSPACE_SETTINGS_NAMESPACE, NOTIFICATIONS_FIELD, type WorkspaceSettings } from '../attention-settings.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
@@ -138,7 +143,7 @@ const NS = 'workspace'
  */
 export const inject = ['contextMenus',
   'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
-  'uiSession', 'uiSession.sessionStatus',
+  'uiSession', 'uiSession.sessionStatus', 'configForms',
 ]
 
 /**
@@ -194,6 +199,23 @@ export function apply(ctx: Context): void {
   const factoryFlowSource = flowSource('workspace.picker.directoryFlow')
   const openSession: WorkspaceBrowserInjected['open'] = (sessionId) => {
     uiWorkspace.openSession(sessionId)
+  }
+  // Desktop shell only: forward background session attention to OS
+  // notifications and offer the General Settings toggle that governs them.
+  installDesktopAttention(ctx, sessions, openSession)
+  if (readDesktopNotifications() !== undefined) {
+    const notificationsForm = ctx.configForms.get<WorkspaceSettings>(WORKSPACE_SETTINGS_NAMESPACE)
+    const notificationsInjected = (): NotificationsRowInjected => ({
+      hooks: { notifications: notificationsForm },
+      setEnabled: enabled => notificationsForm.set(NOTIFICATIONS_FIELD, enabled),
+    })
+    ctx.effect(() => ctx.configForms.whileServed([WORKSPACE_SETTINGS_NAMESPACE], () => ctx.slots.inject(
+      'settings.general.item',
+      () => ctx.slots.register({
+        name: 'settings.general.item', id: 'workspace-notifications', order: 80, locale: NS,
+        inject: notificationsInjected,
+      }, NotificationsRow),
+    )))
   }
   // Registry-global sets as Sets, rebuilt only when the Workspace snapshot changes.
   const pinnedSet = derive(workspaces.list, snapshot => new Set<SessionId>(snapshot.pinnedSessionIds))

@@ -15,6 +15,7 @@ import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotTestRuntime, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 
 usePinnedBrowserLanguages('zh-CN')
@@ -38,6 +39,8 @@ async function bench() {
   const directoryPicker = {}
   const { remote } = runtime
   remote.provideNamespaces({ directoryPicker })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(runtime.ctx, remote)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

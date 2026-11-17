@@ -71,6 +71,7 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { DesktopSessionAttention, installSessionAttention } from './session-attention.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => { await stopOperationReports() }
@@ -962,6 +963,11 @@ async function main(): Promise<void> {
     assertProductSender(event)
     await openUpdatePrompt()
   })
+  const sessionAttention = new DesktopSessionAttention()
+  /** A quit decision is waiting; its dialog owns the user's attention. */
+  let quitPromptPending = false
+  const stopSessionAttentionIpc = installSessionAttention(sessionAttention, assertProductSender,
+    () => quitting || sessionEnding || quitPromptPending || isMandatory() || updateDialog.isOpen)
 
   let configurationPrompt: Promise<void> | undefined
   const showConfigurationError = (): Promise<void> => {
@@ -1505,6 +1511,8 @@ async function main(): Promise<void> {
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
     tray?.dispose()
+    stopSessionAttentionIpc()
+    sessionAttention.dispose()
     stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
@@ -1528,6 +1536,8 @@ async function main(): Promise<void> {
       backgroundNotice?.dispose()
       updateJournal?.action('quit-requested')
       tray?.dispose()
+      stopSessionAttentionIpc()
+      sessionAttention.dispose()
       updateDialog.dispose()
       mandatoryUI?.dispose()
       // Installation preparation already awaited Platform storage cleanup.
@@ -1537,12 +1547,17 @@ async function main(): Promise<void> {
     if (quitting) return
     event.preventDefault()
     if (skipQuitConfirmation || sessionEnding) { finishQuit(); return }
+    quitPromptPending = true
     void quitConfirmation.confirm().then((approved) => {
+      quitPromptPending = false
       if (quitting || shellInstallerOwnsQuit) return
       if (approved) { finishQuit(); return }
       // A quit that started from closing the welcome window destroyed it; a cancelled quit needs it back.
       if (!enteredWorkspace && !recovery.active) void showWelcome().catch((error: unknown) => { reportFatal(error, 'main') })
-    }).catch((error: unknown) => { console.error(error); if (!quitting && !shellInstallerOwnsQuit) finishQuit() })
+    }).catch((error: unknown) => {
+      quitPromptPending = false
+      console.error(error); if (!quitting && !shellInstallerOwnsQuit) finishQuit()
+    })
   })
 
   mainWindow = createMainWindow()

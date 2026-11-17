@@ -51,6 +51,23 @@ it('routes original-file requests through the trusted application bridge', async
   ])
 })
 
+it('forwards session attention and reports clicked sessions back', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
+  const request = { sessionId: 's1', title: 'Session', body: 'completed' }
+  await api.notifications.notify(request)
+  expect(electron.ipcRenderer.invoke).toHaveBeenCalledExactlyOnceWith(DESKTOP_IPC.sessionAttentionNotify, request)
+  const listener = vi.fn()
+  const off = api.notifications.subscribe(listener)
+  const handler = electron.ipcRenderer.on.mock.calls.find(([channel]) => channel === DESKTOP_IPC.sessionAttentionClick)![1] as
+    (event: unknown, sessionId: string) => void
+  handler({}, 's1')
+  expect(listener).toHaveBeenCalledWith('s1')
+  off()
+  expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.sessionAttentionClick, handler)
+})
+
 it('limits product documents to update status and a native confirmation action', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/index.html'))
   await import('../src/preload-app.ts')

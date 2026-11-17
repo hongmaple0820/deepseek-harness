@@ -15,6 +15,7 @@ import { RemoteError, StaticRemoteAccess, TestRemote } from '@deepseek-ai/dsh-cl
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 import {
   type ArchiveSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type RowToastInjected, type SessionArchiveConfirmInjected, type SessionRenameDialogInjected,
@@ -30,6 +31,7 @@ import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { apply as hostApply } from '../src/index.ts'
+import { omitsGeneratedPage } from '../../../settings/settings/tests/live-config.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 import { provideSessionStatus } from './session-status.client.ts'
 
@@ -161,8 +163,9 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
-  Object.assign(new TestRemote(ctx), { directoryPicker })
-  ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const remote = new TestRemote(ctx, { directoryPicker })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(ctx, remote)
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -239,14 +242,12 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
-  it('keeps the host Loader entry inert', () => {
-    expect(hostApply).not.toThrow()
-  })
+  it('keeps its own instance off the generated Settings pages', () => omitsGeneratedPage(ctx => ctx.plugin({ apply: hostApply })))
 
   it('declares the services it drives', () => {
     expect(inject).toEqual(['contextMenus',
       'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
-      'uiSession', 'uiSession.sessionStatus',
+      'uiSession', 'uiSession.sessionStatus', 'configForms',
     ])
   })
 

@@ -22,6 +22,7 @@ import type { PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client
 import { SlotTestRuntime, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyMenus, inject as injectMenus } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
@@ -83,6 +84,8 @@ async function bench(): Promise<SlotTestRuntime> {
   // Directory picking goes through the probe occupant; the namespace only has
   // to be there for ui-workspace's inject to settle.
   runtime.remote.provideNamespaces({ directoryPicker: {} })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(runtime.ctx, runtime.remote)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
