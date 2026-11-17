@@ -4,8 +4,9 @@
  * The tray shows the icon at 16 logical pixels, so Windows picks one of the
  * bundled bitmaps by display scale. Each size is rasterized from the vector
  * source separately instead of downscaling one large bitmap, which keeps edges
- * crisp at every scale. The committed `resources/tray-windows.ico` is the output;
- * rerun `pnpm run render:tray-icon` in `apps/desktop` after changing the vector source.
+ * crisp at every scale. The committed `resources/tray-windows.ico` and its
+ * `resources/tray-windows-attention.ico` variant are the output; rerun
+ * `pnpm run render:tray-icon` in `apps/desktop` after changing the vector source.
  */
 
 import { readFile, writeFile } from 'node:fs/promises'
@@ -16,11 +17,15 @@ import sharp from 'sharp'
 /** Bitmap edge lengths bundled in the tray icon: 16 px at 100 % through 400 % display scale. */
 export const TRAY_ICON_SIZES = [16, 20, 24, 32, 40, 48, 64] as const
 
-/** Vector source and committed output of the tray icon. */
+/** Vector source and committed outputs of the tray icon: idle, and the attention variant carrying a red dot. */
 export const TRAY_ICON_PATHS = {
   source: fileURLToPath(new URL('../resources/icon-windows.svg', import.meta.url)),
   output: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)),
+  attention: fileURLToPath(new URL('../resources/tray-windows-attention.ico', import.meta.url)),
 } as const
+
+/** Attention dot color and the white ring that keeps it legible on any taskbar theme. */
+const ATTENTION_DOT = { fill: '#e5484d', ring: '#ffffff' } as const
 
 /** Coordinate space of the vector source; sharp's SVG density is scaled against it. */
 const SOURCE_EDGE = 1024
@@ -98,15 +103,40 @@ export function unpackIco(ico: Buffer): IcoEntry[] {
  * @returns PNG entries in the given order.
  */
 export async function renderTrayIconEntries(svg: Buffer, sizes: readonly number[] = TRAY_ICON_SIZES): Promise<IcoEntry[]> {
-  const source = svg.toString('utf8')
-  const glyph = '<g id="tray-glyph"'
-  if (!source.includes(glyph)) throw new Error('tray icon: SVG requires a tray-glyph group')
-  // Scale around the application tile center, retaining its background and the whale's aspect ratio.
-  const tray = Buffer.from(source.replace(glyph, `${glyph} transform="translate(552 544) scale(1.2) translate(-552 -544)"`))
+  const tray = traySource(svg)
   return Promise.all(sizes.map(async size => ({
     size,
     png: await sharp(tray, { density: SOURCE_DENSITY * size / SOURCE_EDGE }).resize(size, size).png().toBuffer(),
   })))
+}
+
+/**
+ * Rasterize the tray icon with the attention dot in its top-right corner.
+ * @param svg - SVG document with a 1024-unit square viewBox and a `tray-glyph` group.
+ * @param sizes - Bitmap edges to render.
+ * @returns PNG entries in the given order.
+ */
+export async function renderTrayAttentionEntries(svg: Buffer, sizes: readonly number[] = TRAY_ICON_SIZES): Promise<IcoEntry[]> {
+  return Promise.all(sizes.map(async (size) => {
+    // The dot is drawn at the target edge so its ring stays one device pixel wide at every scale.
+    const dot = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`
+      + `<circle cx="${size * 0.83}" cy="${size * 0.17}" r="${size * 0.15}" fill="${ATTENTION_DOT.fill}"/></svg>`,
+    )
+    const base = sharp(traySource(svg), { density: SOURCE_DENSITY * size / SOURCE_EDGE }).resize(size, size)
+    return {
+      size,
+      png: await base.composite([{ input: await sharp(dot).png().toBuffer() }]).png().toBuffer(),
+    }
+  }))
+}
+
+function traySource(svg: Buffer): Buffer {
+  const source = svg.toString('utf8')
+  const glyph = '<g id="tray-glyph"'
+  if (!source.includes(glyph)) throw new Error('tray icon: SVG requires a tray-glyph group')
+  // Scale around the application tile center, retaining its background and the whale's aspect ratio.
+  return Buffer.from(source.replace(glyph, `${glyph} transform="translate(552 544) scale(1.2) translate(-552 -544)"`))
 }
 
 function pngDimensions(png: Buffer): { width: number; height: number } {
@@ -115,9 +145,12 @@ function pngDimensions(png: Buffer): { width: number; height: number } {
 }
 
 async function main(): Promise<void> {
-  const entries = await renderTrayIconEntries(await readFile(TRAY_ICON_PATHS.source))
+  const source = await readFile(TRAY_ICON_PATHS.source)
+  const entries = await renderTrayIconEntries(source)
   await writeFile(TRAY_ICON_PATHS.output, packIco(entries))
-  console.info(`tray icon: wrote ${TRAY_ICON_PATHS.output} with ${entries.map(entry => String(entry.size)).join(', ')} px bitmaps`)
+  const attention = await renderTrayAttentionEntries(source)
+  await writeFile(TRAY_ICON_PATHS.attention, packIco(attention))
+  console.info(`tray icon: wrote ${TRAY_ICON_PATHS.output} and ${TRAY_ICON_PATHS.attention} with ${entries.map(entry => String(entry.size)).join(', ')} px bitmaps`)
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) await main()

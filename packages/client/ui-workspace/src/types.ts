@@ -10,6 +10,37 @@ export interface DesktopSessionAttentionRequest {
   readonly body: string
 }
 
+/** One session the renderer counts as needing attention. */
+export interface DesktopAttentionSession {
+  /** Session the shell opens when its tray row is chosen. */
+  readonly sessionId: string
+  /** Session display name; the client catalog owns the copy. */
+  readonly title: string
+  /** Why the session needs attention; approvals additionally drive the taskbar and dock attention marks. */
+  readonly kind: 'approval' | 'question' | 'completed' | 'failed'
+}
+
+/** Aggregate the renderer owns and the shell mirrors onto the taskbar, dock, and tray. */
+export interface DesktopAttentionState {
+  /** Number of sessions needing attention; zero clears every OS mark. */
+  readonly count: number
+  /** At most one entry per session, newest last. */
+  readonly sessions: readonly DesktopAttentionSession[]
+}
+
+/**
+ * Origin-scoped taskbar, dock, and tray surface; the renderer computes the aggregate and pushes it
+ * on change, so the shell never polls session state and never reads conversation content.
+ */
+export interface DesktopAttentionSummary {
+  /**
+   * Publish the current aggregate.
+   * @param state - complete current aggregate, not a delta.
+   * @returns after the shell accepted the state.
+   */
+  update(this: void, state: DesktopAttentionState): Promise<void>
+}
+
 /**
  * Origin-scoped OS-notification surface; no Electron objects or arbitrary IPC cross this interface.
  *

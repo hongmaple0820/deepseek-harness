@@ -25,6 +25,11 @@ export interface SessionStatus {
   readonly completionUnread: boolean
   /** Latest unread completion ended with an execution error this Host observed. */
   readonly completionFailed: boolean
+  /**
+   * The reminder came from an explicit unread mark rather than a natural completion. Surfaces that announce new work
+   * outside the sidebar leave it out: a manual mark states the reader's own intent, not news.
+   */
+  readonly manualUnread: boolean
 }
 
 /** Current UI status indexed by Session identity. */
@@ -201,6 +206,7 @@ export class UiSessionStatus extends Service implements HostObservable<SessionSt
         pendingInteraction: pending.get(id),
         completionUnread: unread,
         completionFailed: unread && record.failed,
+        manualUnread: record?.manualUnread === true,
       })
     }
     if (sameSessionStatus(this.statusSnapshot, next)) return
@@ -239,7 +245,8 @@ function sameSessionStatus(left: SessionStatusSnapshot, right: SessionStatusSnap
       || candidate.running !== status.running
       || candidate.pendingInteraction !== status.pendingInteraction
       || candidate.completionUnread !== status.completionUnread
-      || candidate.completionFailed !== status.completionFailed) return false
+      || candidate.completionFailed !== status.completionFailed
+      || candidate.manualUnread !== status.manualUnread) return false
   }
   return true
 }

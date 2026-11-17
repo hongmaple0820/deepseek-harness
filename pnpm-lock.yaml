@@ -7512,6 +7512,9 @@ importers:
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: workspace:*
         version: link:../../test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-approval':
+        specifier: workspace:*
+        version: link:../ui-approval
       '@deepseek-ai/dsh-client-ui-context-menu':
         specifier: workspace:*
         version: link:../ui-context-menu
@@ -7578,6 +7581,9 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/client/web:
     devDependencies:

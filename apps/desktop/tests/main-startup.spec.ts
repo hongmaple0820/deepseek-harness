@@ -214,6 +214,7 @@ const harness = await vi.hoisted(async () => {
   class FakeTray extends EventEmitter {
     readonly setToolTip = vi.fn()
     readonly setContextMenu = vi.fn()
+    readonly setImage = vi.fn()
     readonly destroy = vi.fn()
     constructor(readonly image: unknown) { super(); trays.push(this) }
   }

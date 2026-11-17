@@ -8,7 +8,9 @@ import type {} from '@deepseek-ai/dsh-settings'
 
 import type { Volatile, Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { NOTIFICATIONS_FIELD, WorkspaceSettingsFields, type WorkspaceSettings } from './attention-settings.ts'
+import {
+  INAPP_ATTENTION_FIELD, NOTIFICATIONS_FIELD, TASKBAR_TRAY_FIELD, WorkspaceSettingsFields, type WorkspaceSettings,
+} from './attention-settings.ts'
 
 export {
   WORKSPACE_SETTINGS_NAMESPACE, type WorkspaceSettings,
@@ -16,13 +18,19 @@ export {
 
 /** Runtime preferences projected to the browser. */
 export interface Config {
+  /** Whether sessions needing attention surface in-app notices. */
+  inAppAttention: Volatile<WorkspaceSettings['inAppAttention']>
   /** Whether background session transitions surface OS notifications. */
   notifications: Volatile<WorkspaceSettings['notifications']>
+  /** Whether the taskbar, dock, or tray reflects sessions needing attention. */
+  taskbarTray: Volatile<WorkspaceSettings['taskbarTray']>
 }
 
 /** Live preferences projected to the browser. */
 export const Config = z.object({
+  [INAPP_ATTENTION_FIELD]: WorkspaceSettingsFields[INAPP_ATTENTION_FIELD].volatile(),
   [NOTIFICATIONS_FIELD]: WorkspaceSettingsFields[NOTIFICATIONS_FIELD].volatile(),
+  [TASKBAR_TRAY_FIELD]: WorkspaceSettingsFields[TASKBAR_TRAY_FIELD].volatile(),
 })
 
 /** Host preferences are consumed through the configuration form projection.

@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for 2026-11-15-session-attention-system.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-15-session-attention-system.md
+/agent-note-session-attention-system:
+  en: 29a0177d4cfa1538
+  zh: 63338f18fd719aaa
+/agent-note-session-attention-system/problem:
+  en: 38df1490aad732c4
+  zh: 8a1ac9446d49bf44
+/agent-note-session-attention-system/decision:
+  en: a15c7c13f167e5ac
+  zh: a15c7c13f167e5ac
+/agent-note-session-attention-system/decision/trigger:
+  en: 41932f6a64c14fa6
+  zh: 93282ac09f5f0cc5
+/agent-note-session-attention-system/decision/in-app-attention-stack:
+  en: ec97a96546e574c2
+  zh: c0467b0af456b99f
+/agent-note-session-attention-system/decision/quick-approval-replies:
+  en: 6c93f79793b31426
+  zh: f52a14e1617dd209
+/agent-note-session-attention-system/decision/taskbar-tray-and-dock:
+  en: ba9b9458d9b5262d
+  zh: 86cdf99985368116
+/agent-note-session-attention-system/decision/settings:
+  en: d7da03aa260040ab
+  zh: 102ecf73b4f06fe6
+/agent-note-session-attention-system/decision/relationship-to-existing-notes:
+  en: 9219e439a41d0424
+  zh: 0072ffe0182ce79b
+/agent-note-session-attention-system/alternatives-considered:
+  en: 480a7253ad8999a9
+  zh: 2a8b6c02d1383bcc
+/agent-note-session-attention-system/consequences:
+  en: 4b41c7af43738ef7
+  zh: 7d6bb886db6b52c7

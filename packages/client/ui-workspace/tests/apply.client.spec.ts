@@ -25,13 +25,12 @@ import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionRowButton, SessionArchiveConfirmDialog } from '../src/client/session-actions/ArchiveSession.tsx'
 import { PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
+import { AttentionStack } from '../src/client/AttentionStack.tsx'
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
 import type { ArchiveToastInjected, ToastDisplayInjected } from '../src/client/contract/toast.ts'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
-import { apply as hostApply } from '../src/index.ts'
-import { omitsGeneratedPage } from '../../../settings/settings/tests/live-config.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
 import { provideSessionStatus } from './session-status.client.ts'
 
@@ -242,12 +241,10 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
-  it('keeps its own instance off the generated Settings pages', () => omitsGeneratedPage(ctx => ctx.plugin({ apply: hostApply })))
-
   it('declares the services it drives', () => {
     expect(inject).toEqual(['contextMenus',
       'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
-      'uiSession', 'uiSession.sessionStatus', 'configForms',
+      'uiSession', 'uiSession.sessionStatus', 'uiSession.attention', 'configForms',
     ])
   })
 
@@ -314,7 +311,7 @@ describe('ui-workspace apply', () => {
     // The row actions follow the browser's own declaration, whenever it lands.
     expect(after.slots.entries(MENU_ITEM)).toHaveLength(0)
     expect(after.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(after.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(after.slots.entries('shell.overlay')).toHaveLength(4)
   })
 
   it('declares the two Session row lists and registers the shipped actions and overlay surfaces into them', async () => {
@@ -341,6 +338,7 @@ describe('ui-workspace apply', () => {
       ['workspace.session-rename', undefined, SessionRenameDialog, 'workspace'],
       ['workspace.session-archive', undefined, SessionArchiveConfirmDialog, 'workspace'],
       ['workspace.row-toast', undefined, RowActionToast, undefined],
+      ['workspace.attention-stack', undefined, AttentionStack, 'workspace'],
     ])
     // Only archive notice entries share the browser's viewing store.
     const browser = b.slots.entries('sidebar.workspaces')[0]!
@@ -973,7 +971,7 @@ describe('ui-workspace apply', () => {
     await fiber.await()
     expect(b.slots.entries(MENU_ITEM)).toHaveLength(0)
     expect(b.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(4)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)

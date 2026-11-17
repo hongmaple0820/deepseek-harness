@@ -71,7 +71,7 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
-import { DesktopSessionAttention, installSessionAttention } from './session-attention.ts'
+import { DesktopAttentionChrome, DesktopSessionAttention, installAttentionSummary, installSessionAttention, overlayBadge } from './session-attention.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => { await stopOperationReports() }
@@ -1247,13 +1247,30 @@ async function main(): Promise<void> {
   }
   refreshApplicationMenu()
   const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+  const trayAttentionIconPath = development
+    ? join(app.getAppPath(), 'resources', 'tray-windows-attention.ico')
+    : join(process.resourcesPath, 'tray-attention.ico')
+  /** Open one session in the primary window; tray rows use the same path as a notification click. */
+  const openSessionInWindow = (sessionId: string): void => {
+    focusPrimaryWindow()
+    const window = mainWindow
+    if (window === undefined || window.isDestroyed()) return
+    window.webContents.send(DESKTOP_IPC.sessionAttentionClick, sessionId)
+  }
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
-      tray = new DesktopTray({ iconPath: trayIconPath, locale: currentDesktopLocale,
-        open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
+      tray = new DesktopTray({ iconPath: trayIconPath, attentionIconPath: trayAttentionIconPath,
+        locale: currentDesktopLocale, open: () => { focusPrimaryWindow() }, openSession: openSessionInWindow,
+        quit: () => { app.quit() } })
     } catch (error) { console.warn('desktop tray: unavailable', error) }
   }
+  const attentionChrome = new DesktopAttentionChrome(() => overlayBadge(applicationIconPath))
+  const stopAttentionSummaryIpc = installAttentionSummary(attentionChrome, {
+    tray: () => tray,
+    describe: state => currentDesktopLocale().messages.attentionTooltip.replace('{count}', String(state.count)),
+  }, assertProductSender,
+  () => quitting || sessionEnding || quitPromptPending || isMandatory() || updateDialog.isOpen)
   const backgroundNotice = process.platform === 'win32'
     ? new DesktopBackgroundNotice({ markerPath: join(app.getPath('userData'), 'background-close-confirmed'),
       locale: () => locale, show: ordinaryMessageBox, focus: () => { updateDialog.focus() } })
@@ -1511,6 +1528,7 @@ async function main(): Promise<void> {
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
     tray?.dispose()
+    stopAttentionSummaryIpc()
     stopSessionAttentionIpc()
     sessionAttention.dispose()
     stopAccount?.()
@@ -1536,6 +1554,7 @@ async function main(): Promise<void> {
       backgroundNotice?.dispose()
       updateJournal?.action('quit-requested')
       tray?.dispose()
+      stopAttentionSummaryIpc()
       stopSessionAttentionIpc()
       sessionAttention.dispose()
       updateDialog.dispose()

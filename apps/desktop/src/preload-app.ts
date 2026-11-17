@@ -91,6 +91,9 @@ function createProductApi(): DshDesktopProductApi {
         return () => { ipcRenderer.off(DESKTOP_IPC.sessionAttentionClick, handle) }
       },
     },
+    attention: {
+      update: state => ipcRenderer.invoke(DESKTOP_IPC.sessionAttentionState, state) as Promise<void>,
+    },
   }
 }
 

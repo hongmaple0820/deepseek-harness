@@ -6,7 +6,6 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionAttentionWatcher, type AttentionEvent } from '../src/client/attention.ts'
 import type { SessionReadSnapshot } from '../src/client/model.ts'
-import type { UiSessionStatus } from '../src/client/status.ts'
 import type { SessionReadState } from '../src/types.ts'
 
 const sid = (value: string): SessionId => value as SessionId
@@ -27,7 +26,7 @@ function bench() {
     reading: { state: reading },
     viewingSession: undefined as SessionId | undefined,
   }
-  const watcher = new SessionAttentionWatcher(ctx, status as unknown as UiSessionStatus, pending)
+  const watcher = new SessionAttentionWatcher(ctx, status, pending)
   const events: AttentionEvent[] = []
   const off = watcher.subscribe((event) => { events.push(event) })
   const record = (id: SessionId, value: Partial<SessionReadState>): SessionReadState => ({

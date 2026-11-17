@@ -10,7 +10,7 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionPendingInteraction } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { UiSessionStatus } from './status.ts'
+import type { SessionReadSnapshot } from './model.ts'
 
 /** Attention event kinds; `approval` and `question` are pending-interaction gains. */
 export type AttentionEventKind = 'completed' | 'failed' | 'approval' | 'question'
@@ -26,6 +26,17 @@ export interface AttentionEvent {
 }
 
 /** Ledger of the last-seen raw facts, so only transitions emit. */
+/**
+ * The status facts the watcher reads: the reading model whose `state` publishes raw completion records, and the
+ * Session the main view is showing, which never raises attention.
+ */
+export interface AttentionStatusFacts {
+  /** Reading model publishing the per-Session completion records. */
+  readonly reading: { readonly state: HostObservable<SessionReadSnapshot> }
+  /** Session the main view currently shows, or `undefined` when it shows none. */
+  readonly viewingSession: SessionId | undefined
+}
+
 interface SessionAttentionFact {
   /** Latest ended turn number; an increase is a new natural completion. */
   readonly completedTurn: number
@@ -33,8 +44,9 @@ interface SessionAttentionFact {
   readonly pendingKey: string | undefined
 }
 
-/** Structural contract for the approval-domain answerability the approval contract already defines. */
-interface Answerable extends SessionPendingInteraction {
+/** Structural facts of a pending interaction; the entry itself belongs to the plugin that raised it. */
+interface PendingInteractionFacts {
+  readonly kind: string
   readonly answerable?: boolean
 }
 
@@ -76,7 +88,7 @@ export class SessionAttentionWatcher extends Service {
    */
   constructor(
     ctx: Context,
-    private readonly status: UiSessionStatus,
+    private readonly status: AttentionStatusFacts,
     private readonly pendingInteractions: HostObservable<ReadonlyMap<SessionId, SessionPendingInteraction>>,
   ) {
     super(ctx, 'uiSession.attention')
@@ -128,7 +140,10 @@ export class SessionAttentionWatcher extends Service {
         events.push({ kind: record?.failed === true ? 'failed' : 'completed', sessionId: id })
       }
       if (canEmitPending && pendingKey !== undefined && pendingKey !== prev?.pendingKey) {
-        const answerable = (interaction as Answerable | undefined)?.answerable
+        // The pending-interaction map is merged by whichever plugins raise requests, so the watcher reads approval
+        // answerability through a structural view instead of importing the approval contract.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- The composed program already carries the field.
+        const answerable = (interaction as PendingInteractionFacts | undefined)?.answerable
         const delegatedApproval = interaction?.kind === 'approval' && answerable === false
         if (!delegatedApproval) {
           events.push({ kind: interaction?.kind === 'approval' ? 'approval' : 'question', sessionId: id, key: pendingKey })

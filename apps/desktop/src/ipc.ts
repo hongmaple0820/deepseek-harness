@@ -7,7 +7,7 @@ import type { DesktopKeyboardApi, DesktopShortcutsApi } from '@deepseek-ai/dsh-c
 import type { IpcMainInvokeEvent } from 'electron'
 import type { DesktopBrowserBridge } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopFileDrag } from '@deepseek-ai/dsh-util-file-drag'
-import type { DesktopSessionNotifications } from '@deepseek-ai/dsh-client-ui-workspace/types'
+import type { DesktopAttentionSummary, DesktopSessionNotifications } from '@deepseek-ai/dsh-client-ui-workspace/types'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -47,6 +47,7 @@ export const DESKTOP_IPC = {
   windowsMenu: 'dsh-desktop:windows-menu',
   sessionAttentionNotify: 'dsh-desktop:session-attention-notify',
   sessionAttentionClick: 'dsh-desktop:session-attention-click',
+  sessionAttentionState: 'dsh-desktop:session-attention-state',
 } as const
 
 /** Desktop release update state rendered by desktop-owned UI. */
@@ -116,6 +117,11 @@ export interface DshDesktopProductApi {
    * and receives clicked session ids back.
    */
   readonly notifications: DesktopSessionNotifications
+  /**
+   * Taskbar, dock, and tray marks for the sessions needing attention; the renderer pushes the
+   * complete aggregate on change, so the shell never polls session state.
+   */
+  readonly attention: DesktopAttentionSummary
 }
 
 /** Scheme of Desktop-owned application documents. */

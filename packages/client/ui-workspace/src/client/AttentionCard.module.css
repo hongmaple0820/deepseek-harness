@@ -1,0 +1,115 @@
+/* Stacked session-attention cards. Completed and failed cards fade with the
+   hold the component passes as `--attention-hold`, so the unmount timer and
+   this animation can no longer disagree. */
+
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-shadow-lv2);
+  animation: dsh-attention-in 160ms ease-out;
+}
+
+.card[data-expiring] {
+  animation:
+    dsh-attention-in 160ms ease-out,
+    dsh-attention-out 1000ms ease var(--attention-hold, 8000ms) forwards;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  flex: none;
+  margin-inline-end: -6px;
+}
+
+.kind {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tool {
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+}
+
+.reason {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.error {
+  margin-top: 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@keyframes dsh-attention-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dsh-attention-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion keeps the fade (an opacity change, not movement) and drops the rise. */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card[data-expiring] {
+    animation: dsh-attention-out 1000ms ease var(--attention-hold, 8000ms) forwards;
+  }
+
+  .card:not([data-expiring]) {
+    animation: none;
+  }
+}
