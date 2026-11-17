@@ -22,11 +22,14 @@ export function provideSessionStatus(ctx: Context) {
     readingReady,
     mark,
   }
-  ctx.provide('uiSession', { sessionStatus } as never)
+  const interactions = createSnapshotStore<ReadonlyMap<SessionId, unknown>>(new Map())
+  const attention = { subscribe: () => () => {} }
+  ctx.provide('uiSession', { sessionStatus, pendingInteractions: interactions, attention } as never)
   ctx.provide('uiSession.sessionStatus', sessionStatus as never)
+  ctx.provide('uiSession.attention', attention as never)
   const setUnread = (sessionId: SessionId, unread: boolean): void => {
     table.set(new Map([[sessionId, {
-      running: false, pendingInteraction: undefined, completionUnread: unread, completionFailed: false,
+      running: false, pendingInteraction: undefined, completionUnread: unread, completionFailed: false, manualUnread: false,
     }]]))
   }
   return { table, readingReady, mark, setUnread }

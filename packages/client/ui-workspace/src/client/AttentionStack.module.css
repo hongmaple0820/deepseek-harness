@@ -1,0 +1,38 @@
+/* The attention stack: anchored to the composer card's bottom-left corner and
+   growing upward, so the newest card sits nearest the composer. */
+
+.layer {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Fixed boxes shrink-to-fit against the space right of `left`, so the stack
+     states its width instead of letting an anchored card wrap early. */
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.layer > * {
+  pointer-events: auto;
+}
+
+.overflow {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .overflow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}

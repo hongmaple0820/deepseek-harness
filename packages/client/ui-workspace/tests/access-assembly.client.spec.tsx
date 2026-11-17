@@ -20,6 +20,7 @@ import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { allowAllAccessPlugin, SlotTestRuntime, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyMenus, inject as injectMenus } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 
 usePinnedBrowserLanguages('zh-CN')
 
@@ -59,6 +60,8 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
   runtime.releaseWorkspaceSource()
   runtime.remote.provideNamespaces({ directoryPicker: {} })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(runtime.ctx, runtime.remote)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

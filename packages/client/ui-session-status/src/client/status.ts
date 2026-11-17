@@ -25,6 +25,11 @@ export interface SessionStatus {
   readonly completionUnread: boolean
   /** Latest unread completion ended with an execution error this Host observed. */
   readonly completionFailed: boolean
+  /**
+   * The reminder came from an explicit unread mark rather than a natural completion. Surfaces that announce new work
+   * outside the sidebar leave it out: a manual mark states the reader's own intent, not news.
+   */
+  readonly manualUnread: boolean
 }
 
 /** Current UI status indexed by Session identity. */
@@ -119,6 +124,15 @@ export class UiSessionStatus extends Service implements HostObservable<SessionSt
   }
 
   /**
+   * The Session identity the visible, focused main view retains while it is open; the attention watcher reads this to
+   * suppress transitions of the Session the user is already looking at. A hidden or unfocused page has no view, so the
+   * value is undefined there regardless of main-view retention.
+   */
+  get viewingSession(): SessionId | undefined {
+    return viewVisible() && this.viewedOpenState === 'open' ? this.viewedBinding?.sessionId : undefined
+  }
+
+  /**
    * Mark one Session read or unread through the latest completion known to this Client.
    * @param sessionId - known Session identity.
    * @param unread - requested reminder state.
@@ -175,7 +189,7 @@ export class UiSessionStatus extends Service implements HostObservable<SessionSt
     const reading = this.reading.state.getSnapshot().items
     const list = this.sessions.list.getSnapshot()
     // The visible, focused main view acknowledges its open Session's completions; hiding them meanwhile avoids a flash.
-    const viewing = viewVisible() && this.viewedOpenState === 'open' ? this.viewedBinding?.sessionId : undefined
+    const viewing = this.viewingSession
     const ids = new Set<SessionId>([
       ...(Object.keys(list.byId) as SessionId[]),
       ...this.running.keys(),
@@ -192,6 +206,7 @@ export class UiSessionStatus extends Service implements HostObservable<SessionSt
         pendingInteraction: pending.get(id),
         completionUnread: unread,
         completionFailed: unread && record.failed,
+        manualUnread: record?.manualUnread === true,
       })
     }
     if (sameSessionStatus(this.statusSnapshot, next)) return
@@ -230,7 +245,8 @@ function sameSessionStatus(left: SessionStatusSnapshot, right: SessionStatusSnap
       || candidate.running !== status.running
       || candidate.pendingInteraction !== status.pendingInteraction
       || candidate.completionUnread !== status.completionUnread
-      || candidate.completionFailed !== status.completionFailed) return false
+      || candidate.completionFailed !== status.completionFailed
+      || candidate.manualUnread !== status.manualUnread) return false
   }
   return true
 }

@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for 2026-11-15-desktop-notifications-for-background-sessions.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-15-desktop-notifications-for-background-sessions.md
+/agent-note-desktop-notifications-for-background-sessions:
+  en: 445bad4d53c932a3
+  zh: 49e39e02f58fd531
+/agent-note-desktop-notifications-for-background-sessions/problem:
+  en: 4d8428f3c7ef1e21
+  zh: b9e4a17502d477d8
+/agent-note-desktop-notifications-for-background-sessions/decision:
+  en: a15c7c13f167e5ac
+  zh: a15c7c13f167e5ac
+/agent-note-desktop-notifications-for-background-sessions/decision/trigger:
+  en: c96ad4010e4cbe78
+  zh: 527a8c933d6dd48f
+/agent-note-desktop-notifications-for-background-sessions/decision/desktop-bridge:
+  en: 87168a340b4dcae9
+  zh: cb57058a41e5638c
+/agent-note-desktop-notifications-for-background-sessions/decision/settings:
+  en: 62837a2744cf3325
+  zh: d65381bf1f3eb972
+/agent-note-desktop-notifications-for-background-sessions/decision/relationship-to-existing-notes:
+  en: dd82ecdd758b517c
+  zh: 0c544890fcea8c3f
+/agent-note-desktop-notifications-for-background-sessions/alternatives-considered:
+  en: 721e33bc2f11a540
+  zh: e0527b531b1718b2
+/agent-note-desktop-notifications-for-background-sessions/consequences:
+  en: 2749e646ec891a6a
+  zh: 8471fd5f351f79b7

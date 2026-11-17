@@ -101,7 +101,7 @@ describe('Session running status', () => {
     const off = service.subscribe(changed)
 
     expect(service.getSnapshot().get(id)).toEqual({
-      running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false,
+      running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false,
     })
     b.list.update((draft) => { draft.byId[id]!.running = true })
     expect(service.getSnapshot().get(id)?.running).toBe(true)
@@ -122,7 +122,7 @@ describe('Session running status', () => {
 
     b.emitStatus(id, false)
     expect(service.getSnapshot().get(id)).toEqual({
-      running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false,
+      running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false,
     })
     b.list.update((draft) => { draft.phase = 'ready' })
     expect(service.getSnapshot().has(id)).toBe(false)
@@ -224,11 +224,11 @@ describe('Session status pending interactions', () => {
 
     b.pending.set(new Map([[listed, approval], [unlisted, question]]))
     expect(service.getSnapshot().get(listed)).toEqual({
-      running: false, pendingInteraction: approval, completionUnread: false, completionFailed: false,
+      running: false, pendingInteraction: approval, completionUnread: false, completionFailed: false, manualUnread: false,
     })
     expect(service.getSnapshot().get(listed)?.pendingInteraction).toBe(approval)
     expect(service.getSnapshot().get(unlisted)).toEqual({
-      running: undefined, pendingInteraction: question, completionUnread: false, completionFailed: false,
+      running: undefined, pendingInteraction: question, completionUnread: false, completionFailed: false, manualUnread: false,
     })
     expect(changed).toHaveBeenCalledOnce()
 

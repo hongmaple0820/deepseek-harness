@@ -8,14 +8,19 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { reconcileManualOrder, type ArchivedFilter, type SessionRowState } from './tree.ts'
+import {
+  reconcileManualOrder, type ArchivedFilter, type SessionRowState, type SessionStatusFilter,
+} from './tree.ts'
 
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
 
 /** Session-list grouping mode: sibling Workspace sections, a Workspace tree, or one flat list. */
 export type SessionGroupBy = 'workspace' | 'workspace-tree' | 'flat'
-/** Session order: saved manual positions or current recency. */
+/**
+ * Session order: `manual` freezes every group at its saved positions, while `updated` sorts each group by its newest
+ * Session unless a drag froze that group.
+ */
 export type SessionOrderBy = 'manual' | 'updated'
 
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
@@ -24,10 +29,15 @@ type WorkspaceViewState = {
   orderBy: SessionOrderBy
   /** Explicit group expansion keyed by Workspace identity, including descendants in tree mode. */
   groupExpansion: Record<string, boolean>
-  /** Saved manual order per Workspace group plus the browser-local flat-list account. */
+  /**
+   * Frozen order per Workspace group plus the browser-local flat-list account. A group without an entry follows the
+   * selected order, so dragging one group leaves the others on last-updated.
+   */
   sessionOrderByAccount: Record<string, string[]>
   /** Archived-row visibility; omitted in pre-filter v5 snapshots and read as 'default'. */
   archivedFilter?: ArchivedFilter
+  /** Row-state filter; omitted in earlier v5 snapshots and read as 'all'. */
+  statusFilter?: SessionStatusFilter
 }
 
 type SessionOrderSource = {
@@ -66,6 +76,7 @@ type WorkspaceViewActions = {
     source: SessionOrderSource,
   ) => void
   setArchivedFilter: (draft: WorkspaceViewState, filter: ArchivedFilter) => void
+  setStatusFilter: (draft: WorkspaceViewState, filter: SessionStatusFilter) => void
 }
 
 /** Copy read-only projections into the persisted mutable store representation. */
@@ -87,13 +98,17 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       archivedFilter: 'default',
+      statusFilter: 'all',
     }),
     persist: 'dsh.workspace.view.v5',
     actions: {
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy, initialOrders) => {
-        if (mode === d.orderBy) return
-        d.sessionOrderByAccount = mode === 'manual' ? copySessionOrders(initialOrders) : {}
+        // Manual freezes every group at the order on screen; last-updated drops the frozen orders so each group
+        // follows the list times again.
+        d.sessionOrderByAccount = mode === 'manual'
+          ? { ...d.sessionOrderByAccount, ...copySessionOrders(initialOrders) }
+          : {}
         d.orderBy = mode
       },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },
@@ -108,23 +123,30 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         delete (d as WorkspaceViewState & { sessionUpdatedAtByAccount?: unknown }).sessionUpdatedAtByAccount
       },
       syncSessionOrders: (d, orders) => {
-        if (d.orderBy !== 'manual') return
-        Object.assign(d.sessionOrderByAccount, copySessionOrders(orders))
+        for (const [key, order] of Object.entries(orders)) {
+          if (d.orderBy !== 'manual' && d.sessionOrderByAccount[key] === undefined) continue
+          d.sessionOrderByAccount[key] = [...order]
+        }
       },
       setSessionOrder: (d, accountKey, order, initialOrders) => {
-        if (d.orderBy === 'updated') d.sessionOrderByAccount = copySessionOrders(initialOrders)
-        else Object.assign(d.sessionOrderByAccount, copySessionOrders(initialOrders))
-        d.orderBy = 'manual'
+        // A drag freezes the dragged group only; the other groups keep following last-updated.
+        if (d.orderBy === 'manual') Object.assign(d.sessionOrderByAccount, copySessionOrders(initialOrders))
         d.sessionOrderByAccount[accountKey] = [...order]
       },
       pinSessionOrder: (d, sessionId, accountKeys, source) => {
         const selected = new Set(accountKeys)
-        d.sessionOrderByAccount = Object.fromEntries(Object.entries(source.members).map(([key, members]) => {
+        // A pin fronts the Session in each account it belongs to; every other account keeps following the
+        // selected order, and Manual additionally keeps a complete order per account.
+        const next: Record<string, string[]> = copySessionOrders(d.sessionOrderByAccount)
+        for (const [key, members] of Object.entries(source.members)) {
+          if (d.orderBy !== 'manual' && !selected.has(key)) continue
           const order = reconcileManualOrder(members, d.sessionOrderByAccount[key], source.summaries, source.rowState)
-          return [key, selected.has(key) ? [sessionId, ...order.filter(id => id !== sessionId)] : order]
-        }))
+          next[key] = selected.has(key) ? [sessionId, ...order.filter(id => id !== sessionId)] : order
+        }
+        d.sessionOrderByAccount = next
       },
       setArchivedFilter: (d, filter: ArchivedFilter) => { d.archivedFilter = filter },
+      setStatusFilter: (d, filter: SessionStatusFilter) => { d.statusFilter = filter },
     },
   })
 }

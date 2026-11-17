@@ -62,10 +62,13 @@ describe('installer preparation preserves application dependencies', () => {
       expect(readFileSync(aboutIcon!.from)).toEqual(readFileSync(new URL('../resources/icon-windows.png', import.meta.url)))
       // Only the Windows package carries the tray bitmaps; macOS keeps the Dock.
       const trayIcon = config.extraResources.find(resource => resource.to === 'tray.ico')
+      const attentionIcon = config.extraResources.find(resource => resource.to === 'tray-attention.ico')
       if (platform === 'win32') {
         expect(readFileSync(trayIcon!.from)).toEqual(readFileSync(new URL('../resources/tray-windows.ico', import.meta.url)))
+        expect(readFileSync(attentionIcon!.from)).toEqual(readFileSync(new URL('../resources/tray-windows-attention.ico', import.meta.url)))
       } else {
         expect(trayIcon).toBeUndefined()
+        expect(attentionIcon).toBeUndefined()
       }
       const packager = new Packager({ projectDir: tmpdir() })
       // A foreign source-build target avoids rebuilding modules; the real dependency ownership decision still runs.

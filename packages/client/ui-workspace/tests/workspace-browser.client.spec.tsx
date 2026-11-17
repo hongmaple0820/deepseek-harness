@@ -199,16 +199,14 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
-  it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
+  it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency until a drag freezes that account', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()
     preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
-    const account = mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha'
-    preferences.actions.setSessionOrder(account, ['older', 'newer'], {})
-    preferences.actions.setSessionOrder(UNGROUPED_KEY, ['older', 'newer'], {})
-    preferences.actions.setSessionOrder(FLAT_SESSION_ORDER_KEY, ['older', 'newer'], {})
+    const account = mode === 'flat' ? FLAT_SESSION_ORDER_KEY : mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha'
+    // A saved order belongs to its own group; every other group keeps following last-updated.
+    preferences.actions.setSessionOrder('beta', ['older', 'newer'], {})
     preferences.actions.setGroupExpanded(account, true)
-    preferences.actions.setGroupExpanded(UNGROUPED_KEY, true)
     localStorage.setItem('dsh.workspace.view.v5', JSON.stringify({ ...preferences.getSnapshot(), orderBy: 'updated' }))
     const b = mount({
       useSessions: hook(sessionState([summary('newer', 100)])),
@@ -226,15 +224,25 @@ describe('WorkspaceBrowser', () => {
     expect(names()).toEqual(['older', 'newer'])
     rerender(b, { useSessions: hook(sessionState([summary('older', 80), summary('newer', 100)])) })
     expect(names()).toEqual(['newer', 'older'])
-    expect(b.store.getSnapshot().sessionOrderByAccount[account]).toEqual(['older', 'newer'])
+    expect(b.store.getSnapshot().sessionOrderByAccount[account]).toBeUndefined()
+
+    // A drag freezes this account alone; reselecting last-updated releases it again.
+    act(() => { b.store.actions.setSessionOrder(account, ['older', 'newer'], {}) })
+    expect(names()).toEqual(['older', 'newer'])
+    rerender(b, { useSessions: hook(sessionState([summary('older', 20), summary('newer', 100)])) })
+    expect(names()).toEqual(['older', 'newer'])
+    act(() => { b.store.actions.setOrderBy('updated', {}) })
+    expect(names()).toEqual(['newer', 'older'])
+    // Reselecting last-updated releases every frozen group, not just the one that was dragged.
+    expect(b.store.getSnapshot().sessionOrderByAccount).toEqual({})
     b.view.unmount()
     const restored = mount({
       useSessions: hook(sessionState([summary('older', 80), summary('newer', 100)])),
       useWorkspaces: b.props.useWorkspaces,
     })
     expect(names()).toEqual(['newer', 'older'])
-    act(() => { restored.store.actions.setOrderBy('manual', {}) })
-    expect(names()).toEqual(['newer', 'older'])
+    // Reselecting last-updated cleared every frozen group, so the remount starts from pure recency.
+    expect(restored.store.getSnapshot().sessionOrderByAccount).toEqual({})
   })
 
   it.each(['workspace', 'flat', 'ungrouped'] as const)('starts Manual from the current %s order and forgets discarded layouts', (mode) => {
@@ -516,9 +524,10 @@ describe('WorkspaceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     expect(screen.getByText('分组方式')).toBeTruthy() // the menu heading label
-    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getAllByRole('separator')).toHaveLength(3)
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       '按工作区', '按工作区树', '单列表', '手动排序', '最近更新', '隐藏已归档', '全部对话（显示已归档）', '仅显示已归档',
+      '全部会话', '运行中', '待处理', '有未读', '已失败',
     ])
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()
@@ -854,7 +863,7 @@ describe('WorkspaceBrowser', () => {
     })
     const status = (id: string, value: Partial<SessionStatus>) =>
       hook<SessionStatusSnapshot>(new Map([[sid(id), {
-        running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false, ...value,
+        running: false, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false, ...value,
       }]]))
     const expectVisible = (count: number) => {
       expect(screen.getAllByRole('treeitem').map(row => within(row).getByText(/^(alpha|session-\d+)$/u).textContent))
@@ -875,7 +884,7 @@ describe('WorkspaceBrowser', () => {
       pendingInteraction: { key: 'question:1', kind: 'plan-review', sessionId: sid('session-7') } as SessionPendingInteraction,
     }) })
     expectVisible(7)
-    rerender(b, { useSessionStatus: status('session-8', { completionUnread: true, completionFailed: false }) })
+    rerender(b, { useSessionStatus: status('session-8', { completionUnread: true, completionFailed: false, manualUnread: false }) })
     expectVisible(8)
     fireEvent.click(screen.getByRole('button', { name: '展开其余 4 个会话' }))
     expectVisible(12)
@@ -891,7 +900,7 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent.click(screen.getByText('alpha'))
     const running = (value: boolean) => hook<SessionStatusSnapshot>(new Map([[sid('session-9'), {
-      running: value, pendingInteraction: undefined, completionUnread: false, completionFailed: false,
+      running: value, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false,
     }]]))
     rerender(b, { useSessionStatus: running(true) })
     rerender(b, { useSessionStatus: running(false) })
@@ -914,15 +923,15 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent.click(screen.getByText('alpha'))
     const running = (...ids: string[]) => hook<SessionStatusSnapshot>(new Map(ids.map(id => [sid(id), {
-      running: true, pendingInteraction: undefined, completionUnread: false, completionFailed: false,
+      running: true, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false,
     }])))
     rerender(b, {
       useSessions: hook(sessionState(items, { main: sid('session-53') })),
       useSessionStatus: hook<SessionStatusSnapshot>(new Map([
-        [sid('session-55'), { running: true, pendingInteraction: undefined, completionUnread: false, completionFailed: false }],
-        [sid('session-56'), { running: false, pendingInteraction: undefined, completionUnread: true, completionFailed: false }],
+        [sid('session-55'), { running: true, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false }],
+        [sid('session-56'), { running: false, pendingInteraction: undefined, completionUnread: true, completionFailed: false, manualUnread: false }],
         [sid('session-57'), {
-          running: false, completionUnread: false, completionFailed: false,
+          running: false, completionUnread: false, completionFailed: false, manualUnread: false,
           pendingInteraction: { key: 'question:1', kind: 'question', sessionId: sid('session-57') } as SessionPendingInteraction,
         }],
       ])),
@@ -1153,7 +1162,7 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().orderBy).toBe('updated')
     fireEvent.dragStart(one, { dataTransfer: dragData() })
     fireDrag(two, 'drop', 180)
-    expect(b.store.getSnapshot().orderBy).toBe('manual')
+    expect(b.store.getSnapshot().orderBy).toBe('updated')
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
@@ -2713,7 +2722,7 @@ describe('Workspace tree grouping', () => {
     fireEvent.click(screen.getByText('Child'))
     fireEvent.click(screen.getByText('Projects'))
     const status = (running: boolean) => hook<SessionStatusSnapshot>(new Map([[sid('child-8'), {
-      running, pendingInteraction: undefined, completionUnread: false, completionFailed: false,
+      running, pendingInteraction: undefined, completionUnread: false, completionFailed: false, manualUnread: false,
     }]]))
     rerender(b, { useSessionStatus: status(true) })
     rerender(b, { useSessionStatus: status(false) })

@@ -15,6 +15,7 @@ import { RemoteError, StaticRemoteAccess, TestRemote } from '@deepseek-ai/dsh-cl
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { mountSettingsForms } from './settings-forms.client.ts'
 import {
   type ArchiveSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type RowToastInjected, type SessionArchiveConfirmInjected, type SessionRenameDialogInjected,
@@ -24,12 +25,11 @@ import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionRowButton, SessionArchiveConfirmDialog } from '../src/client/session-actions/ArchiveSession.tsx'
 import { PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
+import { AttentionStack } from '../src/client/AttentionStack.tsx'
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
 import type { ArchiveToastInjected, ToastDisplayInjected } from '../src/client/contract/toast.ts'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
-import { UNGROUPED_KEY } from '../src/client/tree.ts'
-import { apply as hostApply } from '../src/index.ts'
 import { provideSessionStatus } from './session-status.client.ts'
 
 const sid = (id: string) => id as SessionId
@@ -160,8 +160,9 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
-  Object.assign(new TestRemote(ctx), { directoryPicker })
-  ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const remote = new TestRemote(ctx, { directoryPicker })
+  // ui-workspace injects the shared settings forms; serve them empty.
+  await mountSettingsForms(ctx, remote)
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -237,14 +238,10 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
-  it('keeps the host Loader entry inert', () => {
-    expect(hostApply).not.toThrow()
-  })
-
   it('declares the services it drives', () => {
     expect(inject).toEqual(['contextMenus',
       'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
-      'uiSession', 'uiSession.sessionStatus',
+      'uiSession', 'uiSession.sessionStatus', 'uiSession.attention', 'configForms',
     ])
   })
 
@@ -311,7 +308,7 @@ describe('ui-workspace apply', () => {
     // The row actions follow the browser's own declaration, whenever it lands.
     expect(after.slots.entries(MENU_ITEM)).toHaveLength(0)
     expect(after.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(after.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(after.slots.entries('shell.overlay')).toHaveLength(4)
   })
 
   it('declares the two Session row lists and registers the shipped actions and overlay surfaces into them', async () => {
@@ -338,6 +335,7 @@ describe('ui-workspace apply', () => {
       ['workspace.session-rename', undefined, SessionRenameDialog, 'workspace'],
       ['workspace.session-archive', undefined, SessionArchiveConfirmDialog, 'workspace'],
       ['workspace.row-toast', undefined, RowActionToast, undefined],
+      ['workspace.attention-stack', undefined, AttentionStack, 'workspace'],
     ])
     // Only archive notice entries share the browser's viewing store.
     const browser = b.slots.entries('sidebar.workspaces')[0]!
@@ -509,9 +507,9 @@ describe('ui-workspace apply', () => {
     pin.pinSession(sid('three'))
     expect(b.pinSession).toHaveBeenCalledWith('three')
     await vi.waitFor(() => {
+      // The pin freezes the accounts the Session belongs to; the rest of the sidebar keeps following recency.
       expect(view.getSnapshot().sessionOrderByAccount).toEqual({
         alpha: ['three', 'one', 'two'],
-        [UNGROUPED_KEY]: [],
         [FLAT_SESSION_ORDER_KEY]: ['three', 'one', 'two'],
       })
     })
@@ -970,7 +968,7 @@ describe('ui-workspace apply', () => {
     await fiber.await()
     expect(b.slots.entries(MENU_ITEM)).toHaveLength(0)
     expect(b.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(4)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)

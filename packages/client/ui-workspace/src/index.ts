@@ -1,9 +1,41 @@
 /**
- * Workspace picker plugin, node half. Pure UI plugin: the empty apply exists
- * so the plugin appears in the host cordis.yml / Loader (load and lifecycle
- * follow the host; the browser half ships via exports["./client"], discovered
- * through the package.json dsh.client declaration).
+ * Workspace picker plugin, node half. The Host half projects the workspace
+ * attention preferences into the settings forms; the browser half ships via
+ * exports["./client"], discovered through the package.json dsh.client
+ * declaration.
  */
+import type {} from '@deepseek-ai/dsh-settings'
 
-/** Host plugin body — no host-side behavior for the workspace picker plugin. */
-export function apply(): void {}
+import type { Volatile, Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import {
+  INAPP_ATTENTION_FIELD, NOTIFICATIONS_FIELD, TASKBAR_TRAY_FIELD, WorkspaceSettingsFields, type WorkspaceSettings,
+} from './attention-settings.ts'
+
+export {
+  WORKSPACE_SETTINGS_NAMESPACE, type WorkspaceSettings,
+} from './attention-settings.ts'
+
+/** Runtime preferences projected to the browser. */
+export interface Config {
+  /** Whether sessions needing attention surface in-app notices. */
+  inAppAttention: Volatile<WorkspaceSettings['inAppAttention']>
+  /** Whether background session transitions surface OS notifications. */
+  notifications: Volatile<WorkspaceSettings['notifications']>
+  /** Whether the taskbar, dock, or tray reflects sessions needing attention. */
+  taskbarTray: Volatile<WorkspaceSettings['taskbarTray']>
+}
+
+/** Live preferences projected to the browser. */
+export const Config = z.object({
+  [INAPP_ATTENTION_FIELD]: WorkspaceSettingsFields[INAPP_ATTENTION_FIELD].volatile(),
+  [NOTIFICATIONS_FIELD]: WorkspaceSettingsFields[NOTIFICATIONS_FIELD].volatile(),
+  [TASKBAR_TRAY_FIELD]: WorkspaceSettingsFields[TASKBAR_TRAY_FIELD].volatile(),
+})
+
+/** Host preferences are consumed through the configuration form projection.
+ * @param ctx Plugin context used for optional settings presentation.
+ */
+export function apply(ctx: Context): void {
+  ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+}

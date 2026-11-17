@@ -42,6 +42,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 // Type-only: pulls the useSessionStatus root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session-status/client'
+// Type-only: pulls the ConfigForms service merge (ctx.configForms).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   type ArchiveSessionInjected, type DirectoryFlowSlotName, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
@@ -60,6 +62,13 @@ import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker, WorkspacePickerFactory } from './WorkspacePicker.tsx'
+import { installDesktopAttention, readDesktopNotifications } from './desktop-attention.ts'
+import { installAttentionNotices } from './attention.ts'
+import { registerAttentionCards } from './attention-cards.ts'
+import type { AttentionStackInjected } from './contract/attention.ts'
+import { AttentionStack } from './AttentionStack.tsx'
+import { AttentionSettingsRow, type AttentionSettingsRowInjected } from './AttentionSettingsRow.tsx'
+import { WORKSPACE_SETTINGS_NAMESPACE, type WorkspaceSettings } from '../attention-settings.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
@@ -138,7 +147,7 @@ const NS = 'workspace'
  */
 export const inject = ['contextMenus',
   'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
-  'uiSession', 'uiSession.sessionStatus',
+  'uiSession', 'uiSession.sessionStatus', 'uiSession.attention', 'configForms',
 ]
 
 /**
@@ -195,6 +204,24 @@ export function apply(ctx: Context): void {
   const openSession: WorkspaceBrowserInjected['open'] = (sessionId) => {
     uiWorkspace.openSession(sessionId)
   }
+  // Attention surfaces: the in-app stack serves a present reader, and the
+  // desktop shell additionally marks the OS chrome and raises notifications
+  // while the window is away.
+  const attention = installAttentionNotices(ctx, sessions, (sessionId) => { openSession(sessionId) })
+  installDesktopAttention(ctx, sessions, openSession)
+  const attentionSettingsForm = ctx.configForms.get<WorkspaceSettings>(WORKSPACE_SETTINGS_NAMESPACE)
+  const attentionSettingsInjected = (): AttentionSettingsRowInjected => ({
+    hooks: { attention: attentionSettingsForm },
+    setEnabled: (field, enabled) => attentionSettingsForm.set(field, enabled),
+    desktop: readDesktopNotifications() !== undefined,
+  })
+  ctx.effect(() => ctx.configForms.whileServed([WORKSPACE_SETTINGS_NAMESPACE], () => ctx.slots.inject(
+    'settings.general.item',
+    () => ctx.slots.register({
+      name: 'settings.general.item', id: 'workspace-attention', order: 80, locale: NS,
+      inject: attentionSettingsInjected,
+    }, AttentionSettingsRow),
+  )))
   // Registry-global sets as Sets, rebuilt only when the Workspace snapshot changes.
   const pinnedSet = derive(workspaces.list, snapshot => new Set<SessionId>(snapshot.pinnedSessionIds))
   const archivedSet = derive(workspaces.list, snapshot => new Set<SessionId>(snapshot.archivedSessionIds))
@@ -316,6 +343,18 @@ export function apply(ctx: Context): void {
     hooks: { toast: rowToast },
     dismissToast: () => { rowToast.set(null) },
   })
+  // The overflow row asks for the sidebar; only a collapsed one has to move.
+  const focusSidebar = (): void => {
+    if (document.querySelector('[data-sidebar-collapsed]') !== null) ctx.layout.toggleSidebar()
+  }
+  const attentionStackInjected = (): AttentionStackInjected => ({
+    hooks: attention.hooks,
+    focusSidebar,
+    dismiss: (sessionId) => { attention.dismiss(sessionId) },
+    view: (sessionId) => { attention.view(sessionId) },
+    allow: sessionId => attention.allow(sessionId),
+    deny: sessionId => attention.deny(sessionId),
+  })
   const workspaceActionRequest = createSnapshotStore<WorkspaceActionRequest | null>(null)
   const requestWorkspaceAction = (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete'): void => {
     const workspace = workspaces.list.getSnapshot().items.find(row => row.workspaceId === workspaceId)
@@ -415,7 +454,12 @@ export function apply(ctx: Context): void {
       name: 'shell.overlay', id: 'workspace.row-toast', inject: rowToastInjected,
       children: { 'workspace.toast': { kind: 'keyed', scope: 'root' } },
     }, RowActionToast)
+    yield ctx.slots.register({
+      name: 'shell.overlay', id: 'workspace.attention-stack', locale: NS, inject: attentionStackInjected,
+      children: { 'workspace.attention': { kind: 'keyed', scope: 'root' } },
+    }, AttentionStack)
   })
+  registerAttentionCards(ctx)
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {
       name: 'conversation.hero.workspace',

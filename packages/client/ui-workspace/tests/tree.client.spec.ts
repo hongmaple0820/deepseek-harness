@@ -11,7 +11,8 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, sessionSearchIndex, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  matchesStatusFilter, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel,
+  UNGROUPED_KEY, type SessionStatusFilter,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -96,7 +97,9 @@ const noAttention: SessionStatusSnapshot = new Map()
 const status = (
   pendingInteraction: SessionPendingInteraction | undefined,
   overrides: Partial<SessionStatus> = {},
-): SessionStatus => ({ running: undefined, pendingInteraction, completionUnread: false, completionFailed: false, ...overrides })
+): SessionStatus => ({
+  running: undefined, pendingInteraction, completionUnread: false, completionFailed: false, manualUnread: false, ...overrides,
+})
 const archived = (...ids: string[]): readonly SessionId[] => ids.map(sid)
 const rowState = (options: {
   pinned?: readonly string[]
@@ -591,6 +594,62 @@ describe('deriveGroups', () => {
   })
 })
 
+describe('status filter', () => {
+  const filtered = (filter: SessionStatusFilter) => ({
+    expandedGroups: ['project'],
+    statusFilter: filter,
+  })
+  const sessions = list(summary('run', 4), summary('wait', 3), summary('done', 2), summary('bad', 1), summary('idle', 0))
+  const workspaces = [workspace('project', ['run', 'wait', 'done', 'bad', 'idle'])]
+  const facts: SessionStatusSnapshot = new Map([
+    [sid('run'), status(undefined, { running: true })],
+    [sid('wait'), status({ kind: 'approval', key: 'approval:1', sessionId: sid('wait') } as SessionPendingInteraction)],
+    [sid('done'), status(undefined, { completionUnread: true })],
+    [sid('bad'), status(undefined, { completionUnread: true, completionFailed: true })],
+  ])
+  const ids = (filter: SessionStatusFilter) => deriveGroups(sessions, workspaces, noRows, facts, filtered(filter))[0]!
+    .sessions.map(node => node.id)
+
+  it('reads each row indicator as a filter', () => {
+    expect(matchesStatusFilter(undefined, 'all')).toBe(true)
+    expect(matchesStatusFilter(undefined, 'running')).toBe(false)
+    expect(matchesStatusFilter(status(undefined, { running: true }), 'running')).toBe(true)
+    expect(matchesStatusFilter(status(undefined, { pendingInteraction: undefined }), 'waiting')).toBe(false)
+    expect(matchesStatusFilter(status(undefined, { completionUnread: true }), 'unread')).toBe(true)
+    expect(matchesStatusFilter(status(undefined, { completionFailed: true }), 'failed')).toBe(true)
+  })
+
+  it('keeps matching rows in sectioned order', () => {
+    expect(ids('all')).toHaveLength(5)
+    expect(ids('running')).toEqual([sid('run')])
+    expect(ids('waiting')).toEqual([sid('wait')])
+    expect(ids('unread')).toEqual([sid('done'), sid('bad')])
+    expect(ids('failed')).toEqual([sid('bad')])
+  })
+
+  it('counts filtered members and hides groups the filter empties', () => {
+    const quiet = list(summary('idle', 1))
+    const empty = deriveGroups(
+      quiet, [workspace('project', ['idle'])], noRows, facts, filtered('failed'),
+    )
+    expect(empty).toEqual([])
+    const counted = deriveGroups(sessions, workspaces, noRows, facts, filtered('unread'))
+    expect(counted.map(group => [group.key, group.sessionCount])).toEqual([['project', 2]])
+  })
+
+  it('applies the same filter to the flat list', () => {
+    expect(deriveFlat(sessions, sessions.ids, noRows, facts, 'waiting').map(node => node.id)).toEqual([sid('wait')])
+  })
+
+  it('matches a Workspace title so a project name finds its sessions', () => {
+    const search = searchResults(
+      sessions, [workspace('gatenet', ['run', 'wait'])], 'gatenet', noArchive, 'default',
+      noAttention, { items: [], hasMore: false }, 10,
+    )
+    expect(search.items.map(item => item.id).sort()).toEqual([sid('run'), sid('wait')])
+  })
+})
+
 describe('deriveFlat', () => {
   it('renders ordinary forks in the supplied order regardless of timestamps', () => {
     const parent = summary('parent', 10)
@@ -883,7 +942,7 @@ describe('deriveSearchResults', () => {
 })
 
 describe('createWorkspaceViewStore', () => {
-  it('stores view preferences and selects Manual when saving a drag order', () => {
+  it('stores view preferences and freezes only the dragged group', () => {
     const store = createWorkspaceViewStore().create()
     expect(store.getSnapshot().groupBy).toBe('workspace')
     expect(store.getSnapshot().orderBy).toBe('updated')
@@ -893,7 +952,7 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setSessionOrder('alpha', ['one', 'two'], {})
     expect(store.getSnapshot().groupBy).toBe('flat')
     expect(store.getSnapshot()).toMatchObject({
-      orderBy: 'manual',
+      orderBy: 'updated',
       groupExpansion: { alpha: true },
       sessionOrderByAccount: { alpha: ['one', 'two'] },
     })
@@ -910,15 +969,15 @@ describe('createWorkspaceViewStore', () => {
     expect(store.getSnapshot().sessionOrderByAccount).toEqual({ alpha: ['one', 'two'] })
   })
 
-  it('snapshots every account when a recency drag selects Manual', () => {
+  it('freezes only the dragged group while a recency view keeps the others', () => {
     const store = createWorkspaceViewStore().create()
     store.actions.setSessionOrder('alpha', ['two', 'one'], {
       alpha: ['one', 'two'],
       beta: ['three'],
     })
     expect(store.getSnapshot()).toMatchObject({
-      orderBy: 'manual',
-      sessionOrderByAccount: { alpha: ['two', 'one'], beta: ['three'] },
+      orderBy: 'updated',
+      sessionOrderByAccount: { alpha: ['two', 'one'] },
     })
   })
 
@@ -928,21 +987,24 @@ describe('createWorkspaceViewStore', () => {
     expect(store.getSnapshot().sessionOrderByAccount).toEqual({})
   })
 
-  it('saves Pin positions and complete accounts without changing the selected ordering mode', () => {
+  it('fronts a pinned Session in Manual and leaves frozen groups alone in last-updated', () => {
     const store = createWorkspaceViewStore().create()
-    store.actions.pinSessionOrder('old', ['alpha'], {
+    const source = {
       members: {
         alpha: [sid('new'), sid('archive'), sid('old')],
         beta: [sid('other-archive')],
       },
       summaries: list(summary('new', 3), summary('old', 2), summary('archive', 1), summary('other-archive', 0)).byId,
       rowState: rowState({ archived: ['archive', 'other-archive'] }),
-    })
-    expect(store.getSnapshot()).toMatchObject({
-      orderBy: 'updated',
-      sessionOrderByAccount: { alpha: ['old', 'new', 'archive'], beta: ['other-archive'] },
-    })
+    }
+    store.actions.pinSessionOrder('old', ['alpha'], source)
+    // A pin freezes the accounts the Session belongs to and leaves the others on recency.
+    expect(store.getSnapshot()).toMatchObject({ orderBy: 'updated' })
+    expect(store.getSnapshot().sessionOrderByAccount).toEqual({ alpha: ['old', 'new', 'archive'] })
     store.actions.setOrderBy('manual', { alpha: ['new', 'old', 'archive'], beta: ['other-archive'] })
+    store.actions.pinSessionOrder('old', ['alpha'], source)
+    expect(store.getSnapshot().sessionOrderByAccount)
+      .toEqual({ alpha: ['old', 'new', 'archive'], beta: ['other-archive'] })
     store.actions.setSessionOrder('alpha', ['old', 'new', 'archive'], {
       alpha: ['new', 'old', 'archive'], beta: ['other-archive', 'missing-archive'],
     })

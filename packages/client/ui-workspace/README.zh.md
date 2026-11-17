@@ -85,6 +85,14 @@ Session 行渲染运行时的实时 `pendingInteraction` 分类：审批显示**
 
 会话行通过 [ui-context-menu](../ui-context-menu/README.zh.md) 在右键与省略号按钮间共享现有操作贡献。操作对象固定为被点击的会话，不改变选中状态；`sidebar.workspaces.session.menu.item` 仍是组件扩展位置。内置分组依次为置顶、重命名、分叉；复制 Session ID 和可选的本机目录显示；归档，复制 Session ID 与归档之前各有一条分割线。
 
+### 关注提示
+
+当页面可见且聚焦时，主视图之外的会话完成一轮对话、或出现待审批、待回答时，会在输入框上方堆叠区显示一条提示。每条提示包含会话显示标题和一行类型说明；审批提示额外给出一条工具名称与其显示原因。堆叠区最多显示三条提示，最新的最靠近输入框；其上方另有一行溢出提示，说明还有多少个会话需要关注，并展开侧栏。同一会话的新事件替换其旧提示而不叠加；关闭提示后，直到该会话再次产生新事件前不会重新出现。完成与失败提示约八秒后淡出；审批与提问提示保留到该会话结束等待或读者出手。
+
+审批提示提供 **查看**，并在请求仍可回答时提供 **允许** 与 **拒绝**，与审批卡片一样作答，并随之撤下提示；作答失败时保留提示及其错误和 **查看**。由 subagent 等待的委派审批——不是等用户作答的那种——只提供查看；提问提示从不提供快捷回复。**查看** 通过与侧栏相同的导航打开会话。读者离开时不会累积提示：页面隐藏或失焦时堆叠区保持静默，改由桌面壳层负责那段缺席。
+
+General Settings 页面在本包的 `ui-workspace` 命名空间下提供三个偏好：应用内关注提示、系统通知、任务栏与托盘标记，默认全部开启。两个系统偏好仅在桌面壳层提供关注桥接时出现，因此浏览器中只显示应用内偏好。关闭某个偏好只会抑制对应界面；关闭应用内偏好还会立刻撤下屏幕上全部提示。
+
 -----
 
 `ctx.uiWorkspace.openSession(target)` 会同步替换其拥有的 `mainView` reference，并让主区域返回 Conversation，而不等待 `reference.ready`，因此历史加载会显示在已经选中的 Session 视图内。目标可以是已知 Session id，也可以是持久的直接父子 subagent 地址；显式地址不要求预先加载 parent catalog。`openWorkspace(id, beforeOpen?, options?)` 仅在请求未被后续导航替代时打开工作区空白 Session；新会话与重新打开工作区打开同一个空白会话，因此会回到该空白会话中未发送的草稿。`forkSession(id, onCreated?, options?)` 创建子会话，不导航，也不替代尚未完成的导航；`allowMigration` 携带调用方的迁移许可。可选的同步准备回调在目标被 retain 后执行，并且仅对仍有效的 Workspace 请求执行，因此过期请求不会搬移 composer 草稿。后续导航或 owner 释放会阻止晚到的 UI 提交，但不取消底层 Session 创建。
@@ -100,6 +108,8 @@ Workspace 和 Session 的启动基线均就绪后，空安装环境调用 `works
 首次使用的目录名与其存储标题都是固定的，都不跟随读者语言：`workspaces.initializeDefault` 不携带任何名称，同一安装环境在切换语言后仍只有一个磁盘路径和一个存储标题。仍保留该自动标题的工作区，在本包展示它的所有位置——侧栏行及其悬浮卡片、搜索结果元信息、hero 选择器菜单、重命名与删除对话框——都通过控制器的 `workspaceDisplayTitle` 显示为本地化的默认名称。重命名对话框以屏幕上的标签作为初值，而判断确认是否需要保存用的是存储标题，因此对这类工作区直接确认未改动的初值即可固定该名称，该行不再跟随语言；重名检查按工作区身份而非标题排除目标自身。
 
 本包注入 Client `remoteAccess` 服务，并提供根作用域标准 Hook `useWorkspaceAccess(workspaceId, action)`，回答当前 Peer 能否在某个 Workspace 资源上调用 `action`，以及 `ctx.uiWorkspace.whenAccess(workspaceId, action, callback)`，在该答案为 true 期间保持回调的效果，语义同 `ctx.remoteAccess.whenAccess`；快照语义归 [`dsh-api-remote-access`](../../api/remote-access/README.zh.md#client-face)。
+
+关注功能复用 [ui-session-status](../ui-session-status/README.zh.md) 的 `uiSession.attention` 观察者，而不自行读取会话状态。堆叠区是 shell overlay 下的 keyed `workspace.attention` slot，其四个 key（completed、failed、approval、question）通过 owner props 收到提示本身以及 dismiss、view、allow、deny 四个动作；容器测量输入框卡片以便置于其上方，并持有可见提示数量上限。桌面聚合由同一份会话状态快照加上阅读标记派生，因此手动未读标记不会传到操作系统：只有在编码后的状态变化时才发布。这样每个界面只有一个归属：观察者判断发生了什么，本包决定显示在哪里，桌面壳层决定操作系统如何呈现。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
