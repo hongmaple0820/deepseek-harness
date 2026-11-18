@@ -1,0 +1,78 @@
+name: Build Windows installer (unsigned, dev)
+
+# Local-review build: the repository's packaging workflow targets a self-hosted
+# machine with signing hardware. This copy runs the same packaging scripts on a
+# GitHub-hosted Windows runner and uploads the unsigned installer only.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or tag to package
+        type: string
+        default: master
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Write the local packaging environment
+        run: |
+          $lines = @(
+            'DSH_DESKTOP_APP_ID=com.deepseek.dsh',
+            'DSH_DESKTOP_AUTO_UPDATE_ENV=production',
+            'DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN=https://harness.deepseek.com',
+            'DSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL=3'
+          )
+          Set-Content -LiteralPath apps/desktop/.env.windows -Value $lines -Encoding utf8NoBOM
+
+      - name: Build artifacts
+        run: pnpm run build:artifacts
+
+      - name: Package the unsigned installer
+        run: pnpm --filter @deepseek-ai/dsh-desktop run package:win:x64:unsigned
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-windows-installer-unsigned
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/*.exe
+            apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/*.blockmap
+            apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/*.yml
+
+      - name: Upload packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-packaging-logs
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true
+          path: apps/desktop/.desktop-build/packaging-runs/
