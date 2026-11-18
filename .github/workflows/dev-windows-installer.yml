@@ -13,7 +13,7 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -76,3 +76,15 @@ jobs:
           retention-days: 7
           include-hidden-files: true
           path: apps/desktop/.desktop-build/packaging-runs/
+
+      # The run artifacts expire; the release keeps the installer downloadable
+      # from the repository's Releases page without the Actions UI.
+      - name: Publish a download release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $installers = Get-ChildItem apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts -Filter *.exe
+          if ($installers.Count -eq 0) { throw 'no installer to publish' }
+          $tag = "dev-win-${{ github.run_number }}"
+          $notes = "Unsigned development build of ``${{ inputs.ref }}`` at ${{ github.sha }}. Diagnostics: run ${{ github.run_id }}."
+          gh release create $tag --target "${{ inputs.ref }}" --prerelease --title "Dev Windows build ${{ github.run_number }}" --notes $notes $installers.FullName
