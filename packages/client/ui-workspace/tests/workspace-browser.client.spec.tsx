@@ -527,7 +527,7 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(3)
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       '按工作区', '按工作区树', '单列表', '手动排序', '最近更新', '隐藏已归档', '全部对话（显示已归档）', '仅显示已归档',
-      '全部会话', '运行中', '待处理', '有未读', '已失败',
+      '全部会话（2）', '运行中', '待处理', '有未读', '已失败',
     ])
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()

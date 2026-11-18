@@ -33,10 +33,11 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type {
-  ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState, SessionStatusFilter,
+  ArchivedFilter, GroupNode, SessionFilterCounts, SessionNode, SessionOrderBy, SessionRowState, SessionStatusFilter,
 } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, sessionSearchIndex, owningGroupKey, owningParentFolder,
+  statusFilterCounts,
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
@@ -140,14 +141,24 @@ function useNativeDragAcceptance(active: boolean): void {
   }, [active])
 }
 
+/** Locale key per status filter, so menu labels and counts share one table. */
+const STATUS_FILTER_KEYS = {
+  all: 'statusFilter.all',
+  running: 'statusFilter.running',
+  waiting: 'statusFilter.waiting',
+  unread: 'statusFilter.unread',
+  failed: 'statusFilter.failed',
+} as const
+
 /** Grouping, ordering, archived, and status menu; own open state so it resets with the wide chrome. */
 function ViewOptionsMenu({
-  groupBy, orderBy, archivedFilter, statusFilter, onGroupPick, onOrderPick, onArchivedFilterPick, onStatusFilterPick, t,
+  groupBy, orderBy, archivedFilter, statusFilter, counts, onGroupPick, onOrderPick, onArchivedFilterPick, onStatusFilterPick, t,
 }: {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
   archivedFilter: ArchivedFilter
   statusFilter: SessionStatusFilter
+  counts: SessionFilterCounts
   onGroupPick: (mode: SessionGroupBy) => void
   onOrderPick: (mode: SessionOrderBy) => void
   onArchivedFilterPick: (filter: ArchivedFilter) => void
@@ -155,6 +166,13 @@ function ViewOptionsMenu({
   t: WorkspaceBrowserProps['t']
 }) {
   const [open, setOpen] = useState(false)
+  // A filter advertises how many rows selecting it would keep; an empty status
+  // stays plain so the menu does not read as a wall of zeroes.
+  const statusLabel = (filter: SessionStatusFilter): string => {
+    const label = t(STATUS_FILTER_KEYS[filter])
+    const count = counts[filter]
+    return count > 0 ? t('statusFilter.count', { label, n: String(count) }) : label
+  }
   return (
     <Menu
       open={open}
@@ -175,11 +193,11 @@ function ViewOptionsMenu({
         { id: 'only-archived', label: t('viewOptions.onlyArchived'), icon: <IconArchiveCheckOutlineRegular /> },
         { type: 'separator' as const, id: 'status-filter-separator' },
         { type: 'label' as const, id: 'status-filter', text: t('statusFilter.label') },
-        { id: 'status-all', label: t('statusFilter.all') },
-        { id: 'status-running', label: t('statusFilter.running') },
-        { id: 'status-waiting', label: t('statusFilter.waiting') },
-        { id: 'status-unread', label: t('statusFilter.unread') },
-        { id: 'status-failed', label: t('statusFilter.failed') },
+        { id: 'status-all', label: statusLabel('all') },
+        { id: 'status-running', label: statusLabel('running') },
+        { id: 'status-waiting', label: statusLabel('waiting') },
+        { id: 'status-unread', label: statusLabel('unread') },
+        { id: 'status-failed', label: statusLabel('failed') },
       ]}
       selectedIds={[
         groupBy,
@@ -1062,6 +1080,13 @@ export function WorkspaceBrowser({
     [UNGROUPED_KEY, orderedUngroupedSessionIds] as const,
     [FLAT_SESSION_ORDER_KEY, orderedFlatSessionIds] as const,
   ]), [orderedFlatSessionIds, orderedUngroupedSessionIds, orderedWorkspaces])
+  const statuses = useSessionStatus(state => state)
+  // Counts read the flat selection under the archived and text filters, so the
+  // menu advertises the whole picture rather than the current status filter.
+  const statusCounts = useMemo(
+    () => statusFilterCounts(deriveFlat(list, flatMemberIds, rowState, statuses)),
+    [flatMemberIds, list, rowState, statuses],
+  )
   useEffect(() => {
     if (workspacePhase !== 'ready') return
     actions.retainAccountKeys([
@@ -1328,6 +1353,7 @@ export function WorkspaceBrowser({
               orderBy={orderBy}
               archivedFilter={archivedFilter}
               statusFilter={statusFilter}
+              counts={statusCounts}
               onGroupPick={actions.setGroupBy}
               onOrderPick={(mode) => { actions.setOrderBy(mode, activeSessionOrders) }}
               onArchivedFilterPick={actions.setArchivedFilter}

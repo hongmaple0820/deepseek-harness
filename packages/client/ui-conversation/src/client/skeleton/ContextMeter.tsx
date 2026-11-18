@@ -82,6 +82,13 @@ export function ContextMeter({ useProjection, t }: ContextMeterProps) {
   if (context === null) return null
   const percent = context.percent
   const reading = `${percent}%`
+  // Occupancy past these thresholds changes the meter's own voice: near-full
+  // warns, and a session whose next request would exceed the window says so
+  // instead of reporting a capped 100%.
+  const level = percent >= 100 ? 'over' : percent >= 90 ? 'near' : 'ok'
+  const label = level === 'ok'
+    ? t('context.aria', { percent: reading })
+    : t(level === 'over' ? 'context.over' : 'context.near', { percent: reading })
   const [headBefore = '', headAfter = ''] = t('context.aria', { percent: READING_SLOT })
     .split(READING_SLOT)
     .map(part => part.trim())
@@ -100,11 +107,11 @@ export function ContextMeter({ useProjection, t }: ContextMeterProps) {
 
   return (
     <span ref={rootRef} style={{ anchorName }} className={css.root}>
-      <Tooltip label={t('context.aria', { percent: reading })} side="top" delayMs={200} disabled={open} portal>
+      <Tooltip label={label} side="top" delayMs={200} disabled={open} portal>
         <button
           type="button"
-          className={css.trigger}
-          aria-label={t('context.aria', { percent: reading })}
+          className={level === 'ok' ? css.trigger : `${css.trigger} ${level === 'over' ? css.over : css.near}`}
+          aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => { setOpen(!open) }}
@@ -165,6 +172,7 @@ export function ContextMeter({ useProjection, t }: ContextMeterProps) {
               ))}
             </dl>
           )}
+          {level !== 'ok' && <p className={css.hint}>{t('context.recover')}</p>}
         </div>,
         document.body,
       )}

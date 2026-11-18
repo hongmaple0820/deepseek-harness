@@ -256,6 +256,35 @@ export function matchesStatusFilter(
 }
 
 /**
+ * Session counts per status filter, read from the rows the sidebar would render
+ * under the current archived and text filters. The status filter itself is not
+ * applied, so each menu row can advertise what selecting it would show.
+ */
+export interface SessionFilterCounts {
+  readonly all: number
+  readonly running: number
+  readonly waiting: number
+  readonly unread: number
+  readonly failed: number
+}
+
+/**
+ * Count rows by the status filter each one matches.
+ * @param nodes - Rows of the current archived and text selection.
+ * @returns Totals per status filter, with `all` equal to the row count.
+ */
+export function statusFilterCounts(nodes: readonly SessionNode[]): SessionFilterCounts {
+  const counts = { all: nodes.length, running: 0, waiting: 0, unread: 0, failed: 0 }
+  for (const node of nodes) {
+    if (node.running) counts.running += 1
+    if (node.pendingInteraction !== undefined) counts.waiting += 1
+    if (node.completed) counts.unread += 1
+    if (node.failed) counts.failed += 1
+  }
+  return counts
+}
+
+/**
  * Ordinary sessions are visible; among blank sessions, only the current one
  * is visible. Subagent children use their parent header catalog; archived
  * sessions follow the archived filter, while their accounting slots remain

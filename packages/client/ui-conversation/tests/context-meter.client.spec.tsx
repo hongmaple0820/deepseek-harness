@@ -177,4 +177,27 @@ describe('ContextMeter', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(view.queryByRole('dialog')).toBeNull()
   })
+
+  it('warns beside the ring once occupancy nears the window', () => {
+    const view = meter({
+      contextPressure: { pressureTokens: 120_000, contextWindow: 128_000 },
+      contextBreakdown: BREAKDOWN,
+    })
+    const near = zh['context.near'].replace('{percent}', '94%')
+    const trigger = view.getByRole('button', { name: near })
+    expect(trigger.className).toContain(css.near)
+    fireEvent.click(trigger)
+    expect(view.queryByRole('dialog')!.textContent).toContain(zh['context.recover'])
+  })
+
+  it('reports a request over the window instead of a capped reading', () => {
+    const view = meter({
+      contextPressure: { pressureTokens: 200_000, contextWindow: 128_000 },
+      contextBreakdown: BREAKDOWN,
+    })
+    const over = zh['context.over'].replace('{percent}', '100%')
+    const trigger = view.getByRole('button', { name: over })
+    expect(trigger.className).toContain(css.over)
+    expect(view.queryByRole('button', { name: t('context.aria', { percent: '100%' }) })).toBeNull()
+  })
 })

@@ -183,8 +183,8 @@ function UserStyleBubble({
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
-  /** Optional IconActions (or similar) below the bubble; receives the joined text. */
-  actions?: (text: string) => ReactNode
+  /** Optional IconActions (or similar) below the bubble; receives the joined text and its attachments. */
+  actions?: (text: string, attachments: readonly UserContentAttachment[]) => ReactNode
   /** Row whose durable source the message-source seat elects above this bubble. */
   node: DecoratedRow
   /** Seat renderer; rows that do not own the seat pass {@link NO_MESSAGE_SOURCE}. */
@@ -230,7 +230,7 @@ function UserStyleBubble({
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      {actions?.(prepared.text, prepared.attachments)}
     </div>
   )
 }
@@ -254,9 +254,11 @@ export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
       pending
-      actions={text => (
+      actions={(text, attachments) => (
         <MessageIconActions
           text={text}
+          attachments={attachments}
+          loadImage={loadImage}
           clock="start"
           className={css.actions}
           t={t}
@@ -309,9 +311,11 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
       loadImage={loadImage}
       pending={submission.placement === 'steering'}
       echo
-      actions={text => (
+      actions={(text, attachments) => (
         <MessageIconActions
           text={text}
+          attachments={attachments}
+          loadImage={loadImage}
           time={submission.time}
           clock="start"
           className={css.actions}
@@ -347,9 +351,11 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       batchStart={node.kind === 'steering' && node.data.batchStart === true}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
-      actions={text => (
+      actions={(text, attachments) => (
         <MessageIconActions
           text={text}
+          attachments={attachments}
+          loadImage={loadImage}
           time={data.time}
           clock="start"
           className={css.actions}

@@ -219,3 +219,22 @@
   align-self: safe start;
   justify-self: safe end;
 }
+
+/* Near-full occupancy warns without competing with the primary reading; a
+   session over the window takes the error tone and states the recovery. */
+.near,
+.near[aria-expanded='true'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.over,
+.over[aria-expanded='true'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(18px + var(--dsh-content-font-delta-secondary, 0px));
+}

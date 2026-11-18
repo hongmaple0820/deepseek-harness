@@ -11,7 +11,7 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, sessionSearchIndex, owningGroupKey, owningParentFolder,
-  matchesStatusFilter, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel,
+  matchesStatusFilter, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, statusFilterCounts, visibleSessionIds, workspaceLabel,
   UNGROUPED_KEY, type SessionStatusFilter,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -640,6 +640,15 @@ describe('status filter', () => {
   it('applies the same filter to the flat list', () => {
     expect(deriveFlat(sessions, sessions.ids, noRows, facts, 'waiting').map(node => node.id)).toEqual([sid('wait')])
   })
+
+  it('counts every row under the filters that are not the status filter', () => {
+    const nodes = deriveFlat(sessions, sessions.ids, noRows, facts)
+    expect(statusFilterCounts(nodes)).toEqual({ all: 5, running: 1, waiting: 1, unread: 2, failed: 1 })
+    // The archived filter still applies: an archived row is neither shown nor counted.
+    const archived = statusFilterCounts(deriveFlat(sessions, sessions.ids, { ...noRows, archivedSessionIds: [sid('run')] }, facts))
+    expect(archived).toEqual({ all: 4, running: 0, waiting: 1, unread: 2, failed: 1 })
+  })
+
 
   it('matches a Workspace title so a project name finds its sessions', () => {
     const search = searchResults(
